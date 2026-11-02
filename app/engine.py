@@ -1,61 +1,120 @@
 import logging
+from datetime import datetime, timezone, timedelta
+
 from .indicators import technical_signal
 from .risk_manager import RiskManager
+from .economic_news import economic_indicators
+from .decision_policy import decide
+from .news import load_aliases, parse_time
+
 log = logging.getLogger(__name__)
 
+
 class TradingEngine:
-    def __init__(self, settings, api, llm, store):
-        self.s, self.api, self.llm, self.store = settings, api, llm, store
+    def __init__(self, settings, api, llm, store, news=None, clock=None):
+        self.s, self.api, self.llm, self.store, self.news = settings, api, llm, store, news
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.risk = RiskManager(settings)
 
     def run_cycle(self, scan_only=False):
-        portfolio = self.api.portfolio()
-        limits = self.api.limits()
-        rows = self.api.prices(self.s.symbols).get("result", [])
-        prices = {x["symbol"]: int(x["price"]) for x in rows}
-        summary = {"totalAssetValue": portfolio.get("totalAssetValue"),
-                   "availableCash": portfolio.get("availableCash"),
-                   "holdings": portfolio.get("holdings", [])}
+        cutoff = self.clock()
+        try:
+            portfolio, limits = self.api.portfolio(), self.api.limits()
+            rows = self.api.prices(self.s.symbols)["result"]
+            prices = {row["symbol"]: row for row in rows}
+        except Exception as exc:
+            log.warning("사이클 조회 실패: %s", type(exc).__name__)
+            return [{"action": "HOLD", "quantity": 0, "execution": "DATA_ERROR",
+                     "reason": "초기 조회 실패; 주문 없음"}]
+        aliases = {}
+        for field in ("news_symbol_aliases", "gnews_symbol_aliases"):
+            for symbol, names in load_aliases(getattr(self.s, field, "{}")).items():
+                aliases.setdefault(symbol, []).extend(names)
         results = []
         for symbol in self.s.symbols:
             try:
-                price = prices.get(symbol)
-                if not price: continue
-                candles = self.api.candles(symbol, "1d", self.s.candle_count).get("candles", [])
+                quote = prices.get(symbol, {})
+                price = int(quote.get("price", 0))
+                if price <= 0:
+                    raise ValueError("missing price")
+                candles = self.api.candles(symbol, "1d", self.s.candle_count)["candles"]
+                if any(parse_time(c["timestamp"]) > cutoff for c in candles):
+                    raise ValueError("future candle")
                 tech = technical_signal(candles)
-                llm = self.llm.assess(symbol, tech, price, summary)
-                combined = .70 * tech["score"] + .30 * llm["score"]
-                action = "BUY" if combined >= .35 else "SELL" if combined <= -.35 else "HOLD"
+                if candles and max(parse_time(c["timestamp"]) for c in candles) < cutoff - timedelta(days=7):
+                    tech = {"score": 0.0, "data_ready": False, "reason": "캔들 이력 지연"}
+                report = self.news.collect(symbol) if self.news else None
+                if report:
+                    self.store.news(report)
+                economics = economic_indicators(report, symbol, aliases.get(symbol, []), now=self.clock(),
+                    half_life_hours=getattr(self.s, "news_half_life_hours", 12),
+                    max_age_hours=getattr(self.s, "news_max_age_hours", 48),
+                    allow_delayed=getattr(self.s, "news_allow_delayed_in_strategy", True),
+                    min_sources=getattr(self.s, "news_min_sources", 2))
+                summary = {k: portfolio.get(k) for k in ("totalAssetValue", "availableCash", "holdings")}
+                context = None
+                if report and report.get("status") == "ok" and getattr(self.s, "news_use_in_llm", False):
+                    eligible = [a for a in report["articles"] if a.get("provider") in ("gnews", "fixture")
+                                and a.get("observed_at") and parse_time(a["observed_at"]) <= self.clock()
+                                and (not a.get("delay_hours", 0) or getattr(self.s, "news_allow_delayed_in_llm", False))]
+                    if eligible:
+                        context = {**report, "articles": eligible}
+                llm = (self.llm.assess(symbol, tech, price, summary, news=context) if context
+                       else self.llm.assess(symbol, tech, price, summary))
+                decision = decide(tech, llm, economics, self.s)
+                action = decision["action"]
                 holding = next((h for h in portfolio.get("holdings", []) if h["symbol"] == symbol), {})
                 quantity = 0
-                if action == "BUY" and llm["confidence"] >= self.s.min_confidence:
-                    cash_budget = max(0, int(portfolio.get("availableCash", 0) -
-                                     portfolio.get("totalAssetValue", 0) * self.s.cash_reserve_pct))
-                    budget = min(self.s.max_order_value_krw, cash_budget)
-                    position_room = max(0, int(portfolio.get("totalAssetValue", 0) *
-                                      self.s.max_position_pct - int(holding.get("quantity", 0)) * price))
-                    quantity = min(budget, position_room) // price
+                if action == "BUY":
+                    cash = max(0, portfolio.get("availableCash", 0) - portfolio.get("totalAssetValue", 0) * self.s.cash_reserve_pct)
+                    room = max(0, portfolio.get("totalAssetValue", 0) * self.s.max_position_pct - holding.get("quantity", 0) * price)
+                    quantity = int(min(self.s.max_order_value_krw, cash / 1.00015, room) // price)
                 elif action == "SELL":
-                    quantity = int(holding.get("availableQuantity", 0))
-                reason = f"정량 70%({tech['score']:.2f}) + LLM 30%({llm['score']:.2f}) = {combined:.2f}; {tech['reason']} / {llm['reason']}"
-                self.store.decision(symbol, tech, llm, action, reason)
-                item = {"symbol": symbol, "price": price, "action": action,
-                        "score": round(combined, 3), "quantity": int(quantity), "reason": reason}
-                if quantity and not scan_only:
-                    ok, why = self.risk.check_order(action, symbol, quantity, price, portfolio, limits)
-                    if not ok:
+                    quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
+                self.store.decision(symbol, tech, llm, action, decision["reason"])
+                item = {"symbol": symbol, "price": price, "action": action, "quantity": quantity,
+                        "score": decision["score"], "reason": decision["reason"],
+                        "decision": decision, "economic_news": economics,
+                        "news": {"status": report.get("status") if report else "disabled",
+                                 "count": len(report.get("articles", [])) if report else 0,
+                                 "used_in_llm": bool(context)}, "execution": "SCAN_ONLY"}
+                if not scan_only and quantity:
+                    try:
+                        quote_age = (self.clock() - parse_time(quote["timestamp"])).total_seconds()
+                        quote_ok = 0 <= quote_age <= getattr(self.s, "max_price_age_seconds", 900)
+                    except (KeyError, ValueError, TypeError):
+                        quote_ok = False
+                    ok, why = self.risk.check_order(action, symbol, quantity, price, portfolio, limits, now=self.clock())
+                    if not quote_ok:
+                        item["execution"] = "BLOCKED: 시세 시각 누락·지연·미래"
+                    elif not ok:
                         item["execution"] = "BLOCKED: " + why
                     elif self.s.dry_run or not self.s.enable_trading:
-                        item["execution"] = "DRY_RUN: 주문 API 미호출"
-                        self.store.order(symbol, action, quantity, price, "DRY_RUN", item)
+                        item["execution"] = "DRY_RUN"
+                    elif self.store.unresolved_orders():
+                        item["execution"] = "BLOCKED: 결과 미확정 주문 확인 필요"
                     else:
-                        # 시장가 주문: API는 현재 호가 잔량만 체결하고 미체결 잔량은 취소할 수 있음
-                        order = self.api.place_order(symbol, action, quantity)
-                        item["execution"] = order.get("status", "UNKNOWN")
-                        self.store.order(symbol, action, quantity, price, order.get("status", "UNKNOWN"), order)
-                        portfolio, limits = self.api.portfolio(), self.api.limits()
+                        identity = self.store.begin_order(symbol, item)
+                        try:
+                            order = self.api.place_order(symbol, action, quantity)
+                            if order.get("status") not in ("OPEN", "PARTIAL", "FILLED", "CANCELLED") or not order.get("orderId"):
+                                raise ValueError("unknown submission response")
+                            item["execution"] = order["status"]
+                            self.store.order(symbol, action, quantity, price, item["execution"], order)
+                            self.store.finish_order(identity, "RESPONDED", order)
+                            portfolio, limits = self.api.portfolio(), self.api.limits()
+                        except Exception as exc:
+                            item["execution"] = "UNKNOWN_ORDER_STATE"
+                            self.store.finish_order(identity, "UNKNOWN", {"error_type": type(exc).__name__})
+                            self.store.policy_decision(symbol, item)
+                            results.append(item)
+                            break
+                elif not scan_only:
+                    item["execution"] = "NO_ORDER"
+                self.store.policy_decision(symbol, item)
                 results.append(item)
-                log.info("%s", item)
-            except Exception:
-                log.exception("종목 %s 분석 실패", symbol)
+            except Exception as exc:
+                log.warning("종목 %s 분석 실패: %s", symbol, type(exc).__name__)
+                results.append({"symbol": symbol, "action": "HOLD", "quantity": 0,
+                                "execution": "DATA_ERROR", "reason": "종목 입력 오류; 주문 없음"})
         return results

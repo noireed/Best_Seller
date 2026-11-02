@@ -1,0 +1,11 @@
+{
+  "_note": "합성 시연 데이터이며 실제 보도가 아닙니다. 기준 시각: 2026-11-02T12:00:00+09:00",
+  "items": [
+    {"title": "<b>삼성전자</b> 실적 개선", "description": "삼성전자 영업이익 관련 합성 기사입니다.", "originallink": "https://example.com/demo/1", "pubDate": "Mon, 02 Nov 2026 10:00:00 +0900"},
+    {"title": "삼성전자 실적 개선", "description": "중복 기사입니다.", "originallink": "https://example.com/demo/2", "pubDate": "Mon, 02 Nov 2026 10:00:00 +0900"},
+    {"title": "삼성전자 리콜 발표", "description": "제품 사건 분류를 위한 합성 기사입니다.", "originallink": "https://example.com/demo/3", "pubDate": "Mon, 02 Nov 2026 11:00:00 +0900"},
+    {"title": "경쟁사 사상 최대 실적", "description": "본문 요약에는 삼성전자가 언급됩니다.", "originallink": "https://example.com/demo/4", "pubDate": "Mon, 02 Nov 2026 10:00:00 +0900"},
+    {"title": "삼성전자 신제품 출시", "description": "오래된 합성 기사입니다.", "originallink": "https://example.com/demo/5", "pubDate": "Mon, 26 Oct 2026 10:00:00 +0900"},
+    {"title": "삼성전자 수주 확대 전망", "description": "미확정 전망이므로 점수는 중립으로 처리합니다.", "originallink": "https://example.com/demo/6", "pubDate": "Mon, 02 Nov 2026 11:30:00 +0900"}
+  ]
+}

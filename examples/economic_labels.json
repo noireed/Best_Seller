@@ -1,0 +1,30 @@
+{
+  "kind": "SYNTHETIC_HAND_AUTHORED_DIAGNOSTIC_EXAMPLES_NOT_REAL_NEWS",
+  "as_of": "2026-11-03T12:00:00+09:00",
+  "cases": [
+    {"id":"p1","title":"삼성전자 실적 개선","expected":"positive"},
+    {"id":"p2","title":"Samsung Electronics reports record profit","expected":"positive"},
+    {"id":"p3","title":"삼성전자 공급계약 체결","expected":"positive"},
+    {"id":"p4","title":"Samsung Electronics dividend increase announced","expected":"positive"},
+    {"id":"p5","title":"Samsung Electronics revenue jumped 20 percent","expected":"positive"},
+    {"id":"n1","title":"삼성전자 적자 전환","expected":"negative"},
+    {"id":"n2","title":"Samsung Electronics issues profit warning","expected":"negative"},
+    {"id":"n3","title":"삼성전자 계약 해지","expected":"negative"},
+    {"id":"n4","title":"Samsung Electronics factory fire reported","expected":"negative"},
+    {"id":"u1","title":"삼성전자 실적 개선 전망","expected":"neutral"},
+    {"id":"u2","title":"삼성전자 리콜 부인","expected":"neutral"},
+    {"id":"u3","title":"삼성전자 실적 개선과 공장 화재","expected":"neutral"},
+    {"id":"u4","title":"Samsung Electronics board meeting today","expected":"neutral"},
+    {"id":"u5","title":"Samsung Electronics avoids recall","expected":"neutral"},
+    {"id":"i1","title":"경쟁사 record profit","expected":"irrelevant"},
+    {"id":"i2","title":"삼성전자 경쟁사 실적 개선","expected":"irrelevant"},
+    {"id":"i3","title":"Samsung Display record profit","expected":"irrelevant"},
+    {"id":"i4","title":"삼성전자우 실적 개선","expected":"irrelevant"},
+    {"id":"x1","title":"삼성전자 실적 개선","age_hours":80,"expected":"excluded"},
+    {"id":"x2","title":"삼성전자 실적 개선","age_hours":-1,"expected":"excluded"},
+    {"id":"p6","title":"삼성전자 매출 20% 증가","expected":"positive"},
+    {"id":"n5","title":"Samsung Electronics sales fell 7 percent year-on-year","expected":"negative"},
+    {"id":"p7","title":"Samsung Electronics demand rebounds sharply","expected":"positive"},
+    {"id":"n6","title":"Samsung Electronics suffers margin compression","expected":"negative"}
+  ]
+}

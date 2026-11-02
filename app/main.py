@@ -4,6 +4,7 @@ from .api_client import TradingAPI
 from .llm_analyst import LLMAnalyst
 from .storage import Store
 from .engine import TradingEngine
+from .news import build_news_service
 
 def main():
     parser = argparse.ArgumentParser()
@@ -18,9 +19,11 @@ def main():
     if not s.dry_run and not s.enable_trading:
         raise SystemExit("주문 활성화에는 DRY_RUN=false와 ENABLE_TRADING=true가 모두 필요합니다.")
     api = TradingAPI(s.api_base_url, s.team_code)
-    print("로그인:", api.login())
+    login = api.login()
+    print("로그인:", {k: login.get(k) for k in ("teamId", "teamName")})
     print("팀 확인:", api.me())
-    engine = TradingEngine(s, api, LLMAnalyst(s.openai_api_key, s.openai_model), Store(s.db_path))
+    news = build_news_service(s) if s.news_enabled else None
+    engine = TradingEngine(s, api, LLMAnalyst(s.openai_api_key, s.openai_model), Store(s.db_path), news=news)
     while True:
         engine.run_cycle(scan_only=args.scan_only)
         if args.once: break
