@@ -26,6 +26,7 @@ python -m app.main
 ```bash
 python -m app.news_cli --provider gnews --symbol 005930 --output data/news.json
 python -m app.news_cli --api-status
+python -m app.dart_cli --symbol 005930 --output data/dart.json
 ```
 
 외부 API 호출 없이 합성 자료로 판단 규칙과 분류 결과를 확인할 수 있습니다.
@@ -45,6 +46,7 @@ python -m pytest -q
 - 종목 비중, 주문 금액, 가용 현금·수량, 장 운영시간, 쿨다운 등 사전 위험검사
 - SQLite 의사결정/주문/뉴스 기록, 영속 캐시, 로컬 호출 예산과 오류 후 호출 중지
 - 기사 제거 전후의 판단 비교, 분류 평가와 오답 확인 도구
+- DART 공시·연결재무제표 수집, 매출·영업이익·영업이익률 비교, 비교 조건이 명확한 매출 기사의 수치 대조
 
 ## 설정
 - `API_BASE_URL=http://136.119.248.78`
@@ -58,6 +60,8 @@ python -m pytest -q
 - `NEWS_USE_IN_LLM=false` 뉴스의 LLM 직접 입력 비활성화
 - `GNEWS_DAILY_BUDGET=80` 로컬 일일 호출 예산
 - `GNEWS_CACHE_SECONDS=3600` 뉴스 캐시 유지 시간
+- `DART_ENABLED=true`, `DART_API_KEY=` 선택적 DART 연동. 키가 없으면 기존 뉴스 판단을 유지
+- `DART_DAILY_BUDGET=500`, `DART_CACHE_SECONDS=3600` 로컬 호출 예산과 캐시 유지 시간
 
 ## 주의 및 한계
 - 거래 API 기준 시간은 09:00~15:00, 시간당 주문 30회, 동일 종목 30분 쿨다운, 분당 호출 100회입니다. 클라이언트는 한 프로세스에서 분당 60회로 제한합니다.
@@ -65,8 +69,10 @@ python -m pytest -q
 - 거래 API에는 뉴스 검색 경로가 없습니다. GNews를 별도 공급원으로 사용하며 무료 플랜의 12시간 지연을 표시하고 감쇠합니다.
 - 네이버 API HUB 통신 어댑터는 포함하지만 현행 이용 조건에 따라 자동 수집·분석·저장 경로에서는 제외합니다.
 - 뉴스 분석은 학습된 금융 감성 모델이 아닌 규칙 기반 도구입니다. 합성 자료의 평가 결과를 실제 뉴스 정확도나 수익률로 해석하지 않습니다.
+- DART는 실시간 뉴스 대체재가 아닙니다. 현재 관측한 공시를 사용하며 과거 시점의 공시 상태를 복원하지 않습니다. 연결 기준·연도·분기·전년 동기 비교가 명확한 매출 기사만 대조하고, 불일치 기사는 뉴스 점수와 LLM 입력에서 제외합니다. 일치하더라도 별도 매수 점수를 더하지 않습니다.
 - 로컬 뉴스 호출 예산은 같은 API 키와 같은 SQLite 파일을 공유하는 실행에만 적용됩니다. 다른 컴퓨터나 외부 프로그램의 호출은 포함하지 않습니다.
 - 일일 손실 제한, 미체결 주문의 자동 대사, 호가별 예상 체결비용 계산은 아직 완성되지 않았습니다. 응답이 불명확한 주문은 기록하고 새 주문을 차단합니다.
 - 모의투자 환경에서 `--scan-only`와 DRY_RUN으로 검증한 뒤에만 `DRY_RUN=false`, `ENABLE_TRADING=true`로 변경하세요.
 
 뉴스 모듈의 상세 설정과 평가는 [기능 안내](docs/NEWS_GUIDE_V5.md), 점수 계산은 [판단 규칙](docs/NEWS_DECISION_V4.md), API 경로는 [API 매핑](docs/API_MAPPING.md)을 참고하세요.
+DART 인증키 설정과 대조 조건은 [공시·재무정보 안내](docs/DART_GUIDE.md)를 참고하세요.

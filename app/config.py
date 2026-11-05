@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     min_confidence: float = Field(default=0.60, ge=0, le=1)
     db_path: str = "data/trading.db"
     log_level: str = "INFO"
+    dart_enabled: bool = True
+    dart_api_key: str = ""
+    dart_db_path: str = "data/dart_cache.db"
+    dart_cache_seconds: int = Field(default=3600, ge=60, le=86400)
+    dart_daily_budget: int = Field(default=500, ge=1, le=10000)
     news_enabled: bool = False
     news_use_in_llm: bool = False
     naver_client_id: str = ""

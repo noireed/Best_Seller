@@ -5,15 +5,17 @@ from .indicators import technical_signal
 from .risk_manager import RiskManager
 from .economic_news import economic_indicators
 from .decision_policy import decide
+from .dart_analysis import validate_news
 from .news import load_aliases, parse_time
 
 log = logging.getLogger(__name__)
 
 
 class TradingEngine:
-    def __init__(self, settings, api, llm, store, news=None, clock=None):
+    def __init__(self, settings, api, llm, store, news=None, clock=None, dart=None):
         self.s, self.api, self.llm, self.store, self.news = settings, api, llm, store, news
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.dart = dart
         self.risk = RiskManager(settings)
 
     def run_cycle(self, scan_only=False):
@@ -51,10 +53,20 @@ class TradingEngine:
                     max_age_hours=getattr(self.s, "news_max_age_hours", 48),
                     allow_delayed=getattr(self.s, "news_allow_delayed_in_strategy", True),
                     min_sources=getattr(self.s, "news_min_sources", 2))
+                dart_report = None
+                if self.dart:
+                    try:
+                        dart_report = self.dart.collect(symbol)
+                    except Exception:
+                        dart_report = {"symbol": symbol, "status": "unavailable", "reason": "DART_SERVICE_ERROR"}
+                economics = validate_news(economics, dart_report, now=self.clock(),
+                                          min_sources=getattr(self.s, "news_min_sources", 2))
                 summary = {k: portfolio.get(k) for k in ("totalAssetValue", "availableCash", "holdings")}
                 context = None
                 if report and report.get("status") == "ok" and getattr(self.s, "news_use_in_llm", False):
-                    eligible = [a for a in report["articles"] if a.get("provider") in ("gnews", "fixture")
+                    blocked_urls = economics["dart_validation"]["blocked_urls"]
+                    eligible = [a for a in report["articles"] if a.get("url") not in blocked_urls
+                                and a.get("provider") in ("gnews", "fixture")
                                 and a.get("observed_at") and parse_time(a["observed_at"]) <= self.clock()
                                 and (not a.get("delay_hours", 0) or getattr(self.s, "news_allow_delayed_in_llm", False))]
                     if eligible:
@@ -75,6 +87,7 @@ class TradingEngine:
                 item = {"symbol": symbol, "price": price, "action": action, "quantity": quantity,
                         "score": decision["score"], "reason": decision["reason"],
                         "decision": decision, "economic_news": economics,
+                        "dart": dart_report or {"status": "disabled"},
                         "news": {"status": report.get("status") if report else "disabled",
                                  "count": len(report.get("articles", [])) if report else 0,
                                  "used_in_llm": bool(context)}, "execution": "SCAN_ONLY"}

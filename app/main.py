@@ -5,6 +5,7 @@ from .llm_analyst import LLMAnalyst
 from .storage import Store
 from .engine import TradingEngine
 from .news import build_news_service
+from .dart import build_dart_service
 
 def main():
     parser = argparse.ArgumentParser()
@@ -23,7 +24,8 @@ def main():
     print("로그인:", {k: login.get(k) for k in ("teamId", "teamName")})
     print("팀 확인:", api.me())
     news = build_news_service(s) if s.news_enabled else None
-    engine = TradingEngine(s, api, LLMAnalyst(s.openai_api_key, s.openai_model), Store(s.db_path), news=news)
+    engine = TradingEngine(s, api, LLMAnalyst(s.openai_api_key, s.openai_model), Store(s.db_path),
+                           news=news, dart=build_dart_service(s))
     while True:
         engine.run_cycle(scan_only=args.scan_only)
         if args.once: break
