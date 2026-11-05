@@ -57,6 +57,21 @@ def financial_metrics(rows, year, month, receipt):
         if current_margin is not None and prior_margin is not None else None)
     if revenue.get("current") is not None and revenue.get("prior_year_same_period") is not None:
         output["status"] = "ok"
+    balances = {}
+    for name, section, account_ids in (
+        ("current_assets", "BS", {"ifrs-full_CurrentAssets"}),
+        ("current_liabilities", "BS", {"ifrs-full_CurrentLiabilities"}),
+        ("total_liabilities", "BS", {"ifrs-full_Liabilities"}),
+        ("equity", "BS", {"ifrs-full_Equity"}),
+        ("operating_cash_flow_ytd", "CF", {"ifrs-full_CashFlowsFromUsedInOperatingActivities"}),
+    ):
+        matched = [r for r in rows if r.get("sj_div") == section and r.get("currency") == "KRW" and r.get("account_id") in account_ids]
+        balances[name] = _amount(matched[0].get("thstrm_amount")) if len(matched) == 1 else None
+    assets, liabilities, debt, equity = (balances[k] for k in ("current_assets", "current_liabilities", "total_liabilities", "equity"))
+    balances["current_ratio"] = round(assets/liabilities, 4) if assets is not None and liabilities is not None and liabilities > 0 else None
+    balances["liabilities_to_equity_ratio"] = round(debt/equity, 4) if debt is not None and equity is not None and equity > 0 else None
+    balances["cash_flow_period"] = "annual" if annual else "year_to_date"
+    output["balance_and_cash_flow"] = balances
     return output
 
 

@@ -8,6 +8,8 @@ from .decision_policy import decide
 from .dart_analysis import validate_news
 from .policy_comparison import compare_case, policy_settings
 from .event_extraction import assertion_status
+from .event_history import apply_history
+from .fundamental_analysis import apply_fundamentals
 from .news import load_aliases, parse_time
 
 log = logging.getLogger(__name__)
@@ -63,11 +65,29 @@ class TradingEngine:
                         dart_report = {"symbol": symbol, "status": "unavailable", "reason": "DART_SERVICE_ERROR"}
                 economics = validate_news(economics, dart_report, now=self.clock(),
                                           min_sources=getattr(self.s, "news_min_sources", 2))
+                history_snapshot = None
+                if report and getattr(self.s, "event_history_enabled", True):
+                    try:
+                        snapshot = self.store.record_event_history(report, aliases.get(symbol, []), now=self.clock(),
+                            max_age_hours=getattr(self.s, "news_max_age_hours", 48))
+                        if isinstance(snapshot, dict):
+                            history_snapshot = snapshot
+                    except Exception:
+                        history_snapshot = {"status": "unavailable", "reason": "history_storage_error"}
+                economics = apply_history(economics, history_snapshot, now=self.clock(),
+                    half_life_hours=getattr(self.s, "news_half_life_hours", 12),
+                    max_age_hours=getattr(self.s, "news_max_age_hours", 48), min_sources=getattr(self.s, "news_min_sources", 2))
+                economics = apply_fundamentals(economics, dart_report, now=self.clock(),
+                    enabled=getattr(self.s, "fundamental_guard_enabled", True), min_sources=getattr(self.s, "news_min_sources", 2))
                 summary = {k: portfolio.get(k) for k in ("totalAssetValue", "availableCash", "holdings")}
                 context = None
                 if report and report.get("status") == "ok" and getattr(self.s, "news_use_in_llm", False):
                     blocked_urls = economics["dart_validation"]["blocked_urls"]
+                    blocked_urls = set(blocked_urls) | set(economics["event_history"]["blocked_urls"])
+                    blocked_urls |= set(economics["fundamental_guard"]["adjusted_urls"])
+                    blocked_urls |= {e["url"] for e in economics["excluded"] if "company" in e["reason"] or "subsidiary" in e["reason"] or "preferred_share" in e["reason"]}
                     uncertain_urls = {e["url"] for e in economics["evidence"] if e.get("uncertain")}
+                    uncertain_urls |= {e["url"] for e in economics["evidence"] if e.get("rejected_events")}
                     eligible = [a for a in report["articles"] if a.get("url") not in blocked_urls
                                 and a.get("url") not in uncertain_urls
                                 and assertion_status(a.get("title", "")) == "reported"
@@ -101,6 +121,7 @@ class TradingEngine:
                     research_input = {"id": symbol + ":" + research_time, "symbol": symbol,
                         "as_of": research_time, "aliases": aliases.get(symbol, []),
                         "technical": tech, "news": report, "dart": dart_report}
+                    research_input["event_history"] = history_snapshot
                     try:
                         research_input["policy_settings"] = policy_settings(self.s)
                         item["policy_comparison"] = compare_case(research_input, self.s)

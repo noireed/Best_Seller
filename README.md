@@ -27,6 +27,7 @@ python -m app.main
 python -m app.news_cli --provider gnews --symbol 005930 --output data/news.json
 python -m app.news_cli --api-status
 python -m app.dart_cli --symbol 005930 --output data/dart.json
+python -m app.company_cli --symbol 035420 --output data/company_035420.json
 ```
 
 외부 API 호출 없이 합성 자료로 판단 규칙과 분류 결과를 확인할 수 있습니다.
@@ -35,6 +36,7 @@ python -m app.strategy_demo
 python -m app.news_evaluation --output data/evaluation.json
 python -m app.event_evaluation evaluate --dataset examples/event_diagnostics.json --split development --output data/event_evaluation.json
 python -m app.policy_comparison --dataset examples/policy_comparison.json --output data/policy_comparison.json
+python -m app.company_cli --fixture examples/company_event_history.json --output data/company_history_demo.json
 python -m pytest -q
 ```
 
@@ -51,6 +53,8 @@ python -m pytest -q
 - DART 공시·연결재무제표 수집, 매출·영업이익·영업이익률 비교, 비교 조건이 명확한 매출 기사의 수치 대조
 - 경제사건의 기업·근거 위치·기간 표현, 매출·영업이익 변화율, 보도·전망·부인·철회·불확실성 구분
 - 실제 뉴스의 독립 정답 검토 목록, 사건·수치 평가, 동일 입력의 가격/뉴스/DART 판단 비교 기록
+- 사건 주체·협력사·거래 상대방의 보수적 구분, 명시적 회계기간의 정정·부인·재보도 이력
+- 공시 원문 사업·위험·재무 문단 수집, 유동비율·부채/자본·누적 영업현금흐름 확인, 비교 가능한 긍정 실적 뉴스의 제한적 감쇠
 
 ## 설정
 - `API_BASE_URL=http://136.119.248.78`
@@ -67,6 +71,8 @@ python -m pytest -q
 - `DART_ENABLED=true`, `DART_API_KEY=` 선택적 DART 연동. 키가 없으면 기존 뉴스 판단을 유지
 - `DART_DAILY_BUDGET=500`, `DART_CACHE_SECONDS=3600` 로컬 호출 예산과 캐시 유지 시간
 - `RESEARCH_COMPARISON_ENABLED=true` 실제 판단과 별도로 LLM을 제외한 세 가지 연구용 판단 및 입력 기록
+- `EVENT_HISTORY_ENABLED=true`, `DART_DOCUMENT_ENABLED=true` 사건 이력과 공시 원문 수집
+- `FUNDAMENTAL_GUARD_ENABLED=true` 같은 기간의 매출 증가·이익 감소 또는 영업손실에 따른 긍정 실적 뉴스 감쇠. 실험적 규칙이며 수익률 검증값은 아님
 
 ## 주의 및 한계
 - 거래 API 기준 시간은 09:00~15:00, 시간당 주문 30회, 동일 종목 30분 쿨다운, 분당 호출 100회입니다. 클라이언트는 한 프로세스에서 분당 60회로 제한합니다.
@@ -82,3 +88,4 @@ python -m pytest -q
 뉴스 모듈의 상세 설정과 평가는 [기능 안내](docs/NEWS_GUIDE_V5.md), 점수 계산은 [판단 규칙](docs/NEWS_DECISION_V4.md), API 경로는 [API 매핑](docs/API_MAPPING.md)을 참고하세요.
 DART 인증키 설정과 대조 조건은 [공시·재무정보 안내](docs/DART_GUIDE.md)를 참고하세요.
 경제사건 추출, 실제 뉴스 정답 검토 및 기능별 비교는 [분석·평가 안내](docs/EVENT_RESEARCH.md)를 참고하세요.
+기업 귀속·공시 원문·재무 해석·사건 이력은 [기업 분석 안내](docs/COMPANY_RESEARCH.md)를 참고하세요.

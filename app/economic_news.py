@@ -12,9 +12,6 @@ from urllib.parse import urlsplit
 from .news import parse_time
 from .event_extraction import extract_events
 
-COMPETITOR = re.compile(r"경쟁사|경쟁업체|competitor|rival", re.I)
-
-
 def economic_indicators(report, symbol, aliases, *, now=None, half_life_hours=12,
                         max_age_hours=48, allow_delayed=True, min_sources=2):
     now = now or datetime.now(timezone.utc)
@@ -48,11 +45,6 @@ def economic_indicators(report, symbol, aliases, *, now=None, half_life_hours=12
             matching = [a for a in aliases if a.casefold() in title.casefold()]
             if not matching or any((a + "우") in title for a in matching):
                 raise ValueError("company_not_in_title_or_preferred_share")
-            if symbol == "005930" and re.search(r"Samsung\s+(Display|SDI|Biologics|Heavy|Life|Fire)|Samsung Electronics preferred", title, re.I):
-                raise ValueError("subsidiary_or_preferred_share")
-            # Conservative subject rule: another company in the same title is ambiguous.
-            if COMPETITOR.search(title):
-                raise ValueError("ambiguous_company_attribution")
             host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
             if urlsplit(url).scheme not in ("http", "https") or not host:
                 raise ValueError("invalid_source")
@@ -69,6 +61,8 @@ def economic_indicators(report, symbol, aliases, *, now=None, half_life_hours=12
             events = extracted["events"]
             speculative = any(e["assertion"] != "reported" for e in events)
             if not events:
+                if extracted["rejected_events"]:
+                    raise ValueError("ambiguous_company_attribution:" + extracted["rejected_events"][0]["attribution"]["status"])
                 raise ValueError("no_actionable_economic_event")
             # One article gets one bounded vote even if it contains many keywords.
             values = [e["rule_strength"] for e in events]
@@ -80,22 +74,30 @@ def economic_indicators(report, symbol, aliases, *, now=None, half_life_hours=12
                       "source_host": host, "age_hours": round(age, 3), "delay_hours": delay,
                       "weight": weight, "impact": impact, "uncertain": speculative or mixed,
                       "assertion": extracted["assertion"], "period_mentions": extracted["period_mentions"],
-                      "events": events}
+                      "rejected_events": extracted["rejected_events"], "events": events}
             output["evidence"].append(record)
             if impact:
                 sources.add(host)
         except (KeyError, ValueError, TypeError, AttributeError) as exc:
             output["excluded"].append({"url": url, "reason": str(exc)[:100]})
-    # At most one vote per host and event direction: repeated coverage cannot amplify.
+    return rescore(output, min_sources)
+
+
+def rescore(output, min_sources=2):
+    """Recompute the source gate after evidence exclusions or weight reductions."""
     grouped = {}
+    sources = set()
+    output["channels"] = {}
     for row in output["evidence"]:
         if row["impact"]:
+            sources.add(row["source_host"])
             key = (row["source_host"], 1 if row["impact"] > 0 else -1)
             grouped.setdefault(key, row)
         for event in row["events"]:
             output["channels"].setdefault(event["channel"], []).append(event["event"])
     output["channels"] = {k: sorted(set(v)) for k, v in output["channels"].items()}
     output["eligible_sources"] = len(sources)
+    output.update(score=0.0, contribution_allowed=False, status="no_evidence")
     if output["evidence"]:
         output["status"] = "observed"
     if len(sources) >= min_sources and grouped:

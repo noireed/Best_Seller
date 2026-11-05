@@ -12,9 +12,11 @@ from .dart_analysis import validate_news
 from .decision_policy import decide
 from .economic_news import economic_indicators
 from .news import parse_time
+from .event_history import apply_history
+from .fundamental_analysis import apply_fundamentals
 
 POLICY_FIELDS = ("decision_threshold", "news_max_adjustment", "news_min_sources",
-                 "news_half_life_hours", "news_max_age_hours", "news_allow_delayed_in_strategy")
+                 "news_half_life_hours", "news_max_age_hours", "news_allow_delayed_in_strategy", "fundamental_guard_enabled")
 
 
 def policy_settings(settings):
@@ -24,6 +26,9 @@ def policy_settings(settings):
 
 def compare_case(case, settings):
     snapshot = case.get("policy_settings", policy_settings(settings))
+    # Older saved inputs predate the fundamental guard; keep that guard disabled for replay.
+    if isinstance(snapshot, dict) and set(snapshot) == set(POLICY_FIELDS)-{"fundamental_guard_enabled"}:
+        snapshot = {**snapshot, "fundamental_guard_enabled": False}
     if not isinstance(snapshot, dict) or set(snapshot) != set(POLICY_FIELDS):
         raise ValueError("invalid comparison policy settings")
     settings = Settings(_env_file=None, **snapshot)
@@ -35,6 +40,12 @@ def compare_case(case, settings):
         half_life_hours=settings.news_half_life_hours, max_age_hours=settings.news_max_age_hours,
         allow_delayed=settings.news_allow_delayed_in_strategy, min_sources=settings.news_min_sources)
     validated = validate_news(features, case.get("dart"), now=now, min_sources=settings.news_min_sources)
+    features = apply_history(features, case.get("event_history"), now=now,
+        half_life_hours=settings.news_half_life_hours, max_age_hours=settings.news_max_age_hours, min_sources=settings.news_min_sources)
+    validated = apply_history(validated, case.get("event_history"), now=now,
+        half_life_hours=settings.news_half_life_hours, max_age_hours=settings.news_max_age_hours, min_sources=settings.news_min_sources)
+    validated = apply_fundamentals(validated, case.get("dart"), now=now,
+        enabled=settings.fundamental_guard_enabled, min_sources=settings.news_min_sources)
     # LLM opinions can already incorporate news. Exclude them equally from all arms.
     disabled_llm = {"availability": "disabled"}
     enabled = settings.model_copy(update={"news_strategy_enabled": True})

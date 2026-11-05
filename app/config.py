@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     db_path: str = "data/trading.db"
     log_level: str = "INFO"
     research_comparison_enabled: bool = True
+    event_history_enabled: bool = True
+    fundamental_guard_enabled: bool = True
+    dart_document_enabled: bool = True
     dart_enabled: bool = True
     dart_api_key: str = ""
     dart_db_path: str = "data/dart_cache.db"

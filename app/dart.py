@@ -23,10 +23,11 @@ class DartClient:
     BASE = "https://opendart.fss.or.kr/api/"
 
     def __init__(self, api_key, db_path="data/dart_cache.db", *, ttl_seconds=3600,
-                 daily_budget=500, session=None, clock=None):
+                 daily_budget=500, session=None, clock=None, include_documents=False):
         self.api_key, self.db_path = api_key, str(db_path)
         self.ttl_seconds, self.daily_budget = ttl_seconds, daily_budget
         self.session = session or requests.Session()
+        self.include_documents = include_documents
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.account = hashlib.sha256(api_key.encode()).hexdigest()
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +59,7 @@ class DartClient:
         if not self.api_key:
             raise DartError("DART_API_KEY 미설정")
         now = self._now()
-        request = json.dumps([endpoint, params], sort_keys=True)
+        request = json.dumps([endpoint, params, "document-parser-v1"] if endpoint == "document.xml" else [endpoint, params], sort_keys=True)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT observed,expires,payload FROM dart_cache WHERE account=? AND request=?",
@@ -79,7 +80,17 @@ class DartClient:
                 params={**params, "crtfc_key": self.api_key}, timeout=15)
             if response.status_code != 200:
                 raise DartError("DART_HTTP_FAILURE")
-            if endpoint == "corpCode.xml":
+            if endpoint == "document.xml":
+                if not zipfile.is_zipfile(io.BytesIO(response.content)):
+                    root = ET.fromstring(response.content)
+                    status = root.findtext("status", "")
+                    raise DartError("DART_STATUS_" + (status if re.fullmatch(r"\d{3}", status) else "INVALID_XML"))
+                from .disclosure_reader import parse_document
+                try:
+                    payload = parse_document(response.content, params["rcept_no"])
+                except (ValueError, ET.ParseError, zipfile.BadZipFile, UnicodeError):
+                    raise DartError("DART_DOCUMENT_FORMAT_UNSUPPORTED") from None
+            elif endpoint == "corpCode.xml":
                 content = response.content
                 if len(content) > 20_000_000:
                     raise DartError("DART_CORP_FILE_TOO_LARGE")
@@ -114,6 +125,8 @@ class DartClient:
         except Exception as exc:
             # Never include request URLs, provider messages or credentials in errors.
             code = str(exc) if isinstance(exc, DartError) else "DART_TRANSPORT_OR_FORMAT_ERROR"
+            if code == "DART_DOCUMENT_FORMAT_UNSUPPORTED":
+                raise DartError(code) from None
             seconds = 86400 if code.endswith(("010", "011", "012", "020", "901")) else 60
             with self._db() as db:
                 db.execute("INSERT INTO dart_control VALUES(?,?) ON CONFLICT(account) DO UPDATE SET blocked=MAX(blocked,excluded.blocked)",
@@ -184,6 +197,14 @@ class DartClient:
             result["financials"].update(observed_at=observed, filing_date=filing["rcept_dt"],
                 url="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=" + receipt)
             result["financial_status"] = result["financials"]["status"]
+            from .fundamental_analysis import review_financials
+            result["fundamental_review"] = review_financials(result["financials"])
+            if self.include_documents:
+                try:
+                    document, document_observed = self._request("document.xml", {"rcept_no": receipt}, ttl=86400)
+                    result["document"] = {**document, "observed_at": document_observed}
+                except DartError as exc:
+                    result["document"] = {"status": "unavailable", "reason": str(exc)}
         except DartError as exc:
             result.update(status="unavailable", reason=str(exc), financials=None)
         except (KeyError, ValueError, TypeError, AttributeError):
@@ -195,4 +216,5 @@ def build_dart_service(settings):
     if not getattr(settings, "dart_enabled", False):
         return None
     return DartClient(settings.dart_api_key, settings.dart_db_path,
-                      ttl_seconds=settings.dart_cache_seconds, daily_budget=settings.dart_daily_budget)
+                      ttl_seconds=settings.dart_cache_seconds, daily_budget=settings.dart_daily_budget,
+                      include_documents=getattr(settings, "dart_document_enabled", True))

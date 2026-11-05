@@ -2,6 +2,7 @@
 """Title-only economic extraction with assertion status and source spans."""
 from math import isfinite
 import re
+from .company_attribution import attribute_event, mentions
 
 # These are experimental ordinal rule strengths, NOT returns or probabilities.
 RULES = (
@@ -54,22 +55,27 @@ def extract_events(title, aliases):
     if not isinstance(title, str) or len(title) > 10000:
         raise ValueError("invalid_title")
     aliases = [a for a in aliases if isinstance(a, str) and a.strip()]
-    events = []
+    events, rejected = [], []
     for clause_match in re.finditer(r"[^;；。!?…]+", title):
         clause = clause_match.group()
-        actors = [a for a in aliases if a.casefold() in clause.casefold()]
+        actors = [name for _, _, name in mentions(clause, aliases)]
         if not actors:
             continue
         actor = max(actors, key=len)
         status = assertion_status(clause)
         def record(event_id, channel, impact, match, meaning, change=None):
             start, end = clause_match.start()+match.start(), clause_match.start()+match.end()
+            attribution = attribute_event(clause, aliases, match.start(), match.end())
+            attribution["clause_span"] = [clause_match.start(), clause_match.end()]
+            for mention in attribution["target_mentions"]:
+                mention["span"] = [value+clause_match.start() for value in mention["span"]]
             event = {"event": event_id, "channel": channel, "rule_strength": impact,
-                "actor": actor, "assertion": status, "evidence_text": title[start:end],
+                "actor": attribution["actor"] or actor, "assertion": status, "evidence_text": title[start:end],
+                "attribution": attribution,
                 "span": [start, end], "economic_interpretation": meaning}
             if change:
                 event["reported_change"] = change
-            events.append(event)
+            (events if attribution["status"] == "direct" else rejected).append(event)
         for metric, channel, english, korean in MOVEMENTS:
             for direction, en, ko, impact in (
                 ("increase", r"rose|grew|jumped|increased|grow|rise|increase|(?:was\s+)?up", "증가", .5 if metric == "revenue" else .8),
@@ -90,7 +96,7 @@ def extract_events(title, aliases):
             if match:
                 record(event_id, channel, impact, match, meaning)
     states = {e["assertion"] for e in events}
-    return {"version": "economic-extraction-v2", "events": events,
+    return {"version": "economic-extraction-v3", "events": events, "rejected_events": rejected,
             "assertion": next(iter(states)) if len(states) == 1 else "mixed" if states else "none",
             "period_mentions": list(dict.fromkeys(m.group() for m in re.finditer(r"20\d{2}년?|\bQ[1-4]\b|[1-4]\s*분기|연간|\bYTD\b", title, re.I))),
             "limitations": "Rule-based title extraction; reported does not mean independently verified."}
