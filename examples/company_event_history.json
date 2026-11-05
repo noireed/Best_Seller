@@ -1,0 +1,109 @@
+{
+  "kind": "SYNTHETIC_COMPANY_EVENT_HISTORY",
+  "symbol": "005930",
+  "aliases": [
+    "삼성전자",
+    "Samsung Electronics"
+  ],
+  "snapshots": [
+    {
+      "as_of": "2026-11-04T23:00:00+00:00",
+      "news": {
+        "symbol": "005930",
+        "status": "ok",
+        "articles": [
+          {
+            "title": "Samsung Electronics consolidated Q3 2026 revenue grew 30% YoY",
+            "url": "https://one.example/6",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-04T21:00:00+00:00",
+            "observed_at": "2026-11-04T21:00:00+00:00"
+          },
+          {
+            "title": "삼성전자 2026년 3분기 연결 매출 30% 증가 전년 대비",
+            "url": "https://two.example/5",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-04T22:00:00+00:00",
+            "observed_at": "2026-11-04T22:00:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "as_of": "2026-11-05T01:00:00+00:00",
+      "news": {
+        "symbol": "005930",
+        "status": "ok",
+        "articles": [
+          {
+            "title": "Samsung Electronics consolidated Q3 2026 revenue grew 30% YoY",
+            "url": "https://one.example/6",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-04T21:00:00+00:00",
+            "observed_at": "2026-11-04T21:00:00+00:00"
+          },
+          {
+            "title": "삼성전자 2026년 3분기 연결 매출 30% 증가 전년 대비",
+            "url": "https://two.example/5",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-04T22:00:00+00:00",
+            "observed_at": "2026-11-04T22:00:00+00:00"
+          },
+          {
+            "title": "Correction: Samsung Electronics consolidated Q3 2026 revenue grew 10% YoY",
+            "url": "https://one.example/3",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-05T00:00:00+00:00",
+            "observed_at": "2026-11-05T00:00:00+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "as_of": "2026-11-05T03:00:00+00:00",
+      "news": {
+        "symbol": "005930",
+        "status": "ok",
+        "articles": [
+          {
+            "title": "Samsung Electronics consolidated Q3 2026 revenue grew 30% YoY",
+            "url": "https://one.example/6",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-04T21:00:00+00:00",
+            "observed_at": "2026-11-04T21:00:00+00:00"
+          },
+          {
+            "title": "삼성전자 2026년 3분기 연결 매출 30% 증가 전년 대비",
+            "url": "https://two.example/5",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-04T22:00:00+00:00",
+            "observed_at": "2026-11-04T22:00:00+00:00"
+          },
+          {
+            "title": "Correction: Samsung Electronics consolidated Q3 2026 revenue grew 10% YoY",
+            "url": "https://one.example/3",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-05T00:00:00+00:00",
+            "observed_at": "2026-11-05T00:00:00+00:00"
+          },
+          {
+            "title": "정정: 삼성전자 2026년 3분기 연결 매출 10% 증가 전년 대비",
+            "url": "https://two.example/1",
+            "provider": "fixture",
+            "delay_hours": 0,
+            "published_at": "2026-11-05T02:00:00+00:00",
+            "observed_at": "2026-11-05T02:00:00+00:00"
+          }
+        ]
+      }
+    }
+  ]
+}

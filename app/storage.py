@@ -2,6 +2,7 @@ import sqlite3, json
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from .event_history import EventHistory
 
 class Store:
     def __init__(self, path):
@@ -13,6 +14,11 @@ class Store:
         self.db.execute("CREATE TABLE IF NOT EXISTS policy_decisions(id INTEGER PRIMARY KEY, at TEXT, symbol TEXT, report TEXT)")
         self.db.execute("CREATE TABLE IF NOT EXISTS order_intents(id INTEGER PRIMARY KEY, at TEXT, symbol TEXT, state TEXT, report TEXT)")
         self.db.commit()
+        self.event_history = EventHistory(self.db)
+
+    def record_event_history(self, report, aliases, *, now, max_age_hours=48):
+        self.event_history.ingest(report, aliases, now=now, max_age_hours=max_age_hours)
+        return self.event_history.snapshot(report["symbol"], now=now)
 
     def news(self, report):
         if any(a.get("provider") == "naver" for a in report.get("articles", [])):
