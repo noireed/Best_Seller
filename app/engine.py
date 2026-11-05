@@ -6,6 +6,8 @@ from .risk_manager import RiskManager
 from .economic_news import economic_indicators
 from .decision_policy import decide
 from .dart_analysis import validate_news
+from .policy_comparison import compare_case, policy_settings
+from .event_extraction import assertion_status
 from .news import load_aliases, parse_time
 
 log = logging.getLogger(__name__)
@@ -65,7 +67,10 @@ class TradingEngine:
                 context = None
                 if report and report.get("status") == "ok" and getattr(self.s, "news_use_in_llm", False):
                     blocked_urls = economics["dart_validation"]["blocked_urls"]
+                    uncertain_urls = {e["url"] for e in economics["evidence"] if e.get("uncertain")}
                     eligible = [a for a in report["articles"] if a.get("url") not in blocked_urls
+                                and a.get("url") not in uncertain_urls
+                                and assertion_status(a.get("title", "")) == "reported"
                                 and a.get("provider") in ("gnews", "fixture")
                                 and a.get("observed_at") and parse_time(a["observed_at"]) <= self.clock()
                                 and (not a.get("delay_hours", 0) or getattr(self.s, "news_allow_delayed_in_llm", False))]
@@ -91,6 +96,18 @@ class TradingEngine:
                         "news": {"status": report.get("status") if report else "disabled",
                                  "count": len(report.get("articles", [])) if report else 0,
                                  "used_in_llm": bool(context)}, "execution": "SCAN_ONLY"}
+                if getattr(self.s, "research_comparison_enabled", True):
+                    research_time = self.clock().isoformat()
+                    research_input = {"id": symbol + ":" + research_time, "symbol": symbol,
+                        "as_of": research_time, "aliases": aliases.get(symbol, []),
+                        "technical": tech, "news": report, "dart": dart_report}
+                    try:
+                        research_input["policy_settings"] = policy_settings(self.s)
+                        item["policy_comparison"] = compare_case(research_input, self.s)
+                        item["research_input"] = research_input
+                    except Exception:
+                        # A research/export failure must not interrupt the trading policy.
+                        item["policy_comparison"] = {"status": "unavailable"}
                 if not scan_only and quantity:
                     try:
                         quote_age = (self.clock() - parse_time(quote["timestamp"])).total_seconds()

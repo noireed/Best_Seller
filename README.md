@@ -33,6 +33,8 @@ python -m app.dart_cli --symbol 005930 --output data/dart.json
 ```bash
 python -m app.strategy_demo
 python -m app.news_evaluation --output data/evaluation.json
+python -m app.event_evaluation evaluate --dataset examples/event_diagnostics.json --split development --output data/event_evaluation.json
+python -m app.policy_comparison --dataset examples/policy_comparison.json --output data/policy_comparison.json
 python -m pytest -q
 ```
 
@@ -47,6 +49,8 @@ python -m pytest -q
 - SQLite 의사결정/주문/뉴스 기록, 영속 캐시, 로컬 호출 예산과 오류 후 호출 중지
 - 기사 제거 전후의 판단 비교, 분류 평가와 오답 확인 도구
 - DART 공시·연결재무제표 수집, 매출·영업이익·영업이익률 비교, 비교 조건이 명확한 매출 기사의 수치 대조
+- 경제사건의 기업·근거 위치·기간 표현, 매출·영업이익 변화율, 보도·전망·부인·철회·불확실성 구분
+- 실제 뉴스의 독립 정답 검토 목록, 사건·수치 평가, 동일 입력의 가격/뉴스/DART 판단 비교 기록
 
 ## 설정
 - `API_BASE_URL=http://136.119.248.78`
@@ -62,6 +66,7 @@ python -m pytest -q
 - `GNEWS_CACHE_SECONDS=3600` 뉴스 캐시 유지 시간
 - `DART_ENABLED=true`, `DART_API_KEY=` 선택적 DART 연동. 키가 없으면 기존 뉴스 판단을 유지
 - `DART_DAILY_BUDGET=500`, `DART_CACHE_SECONDS=3600` 로컬 호출 예산과 캐시 유지 시간
+- `RESEARCH_COMPARISON_ENABLED=true` 실제 판단과 별도로 LLM을 제외한 세 가지 연구용 판단 및 입력 기록
 
 ## 주의 및 한계
 - 거래 API 기준 시간은 09:00~15:00, 시간당 주문 30회, 동일 종목 30분 쿨다운, 분당 호출 100회입니다. 클라이언트는 한 프로세스에서 분당 60회로 제한합니다.
@@ -76,3 +81,4 @@ python -m pytest -q
 
 뉴스 모듈의 상세 설정과 평가는 [기능 안내](docs/NEWS_GUIDE_V5.md), 점수 계산은 [판단 규칙](docs/NEWS_DECISION_V4.md), API 경로는 [API 매핑](docs/API_MAPPING.md)을 참고하세요.
 DART 인증키 설정과 대조 조건은 [공시·재무정보 안내](docs/DART_GUIDE.md)를 참고하세요.
+경제사건 추출, 실제 뉴스 정답 검토 및 기능별 비교는 [분석·평가 안내](docs/EVENT_RESEARCH.md)를 참고하세요.
