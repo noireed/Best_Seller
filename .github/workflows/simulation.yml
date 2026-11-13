@@ -1,12 +1,22 @@
 name: AQuA simulation
 on:
   push:
-    branches: [feature/dart-financial-validation]
+    branches: [fix/cloud-research]
     paths: [.github/workflows/simulation.yml, app/cloud_cycle.py]
   schedule:
     - cron: '7,22,37,52 0-5 * * 1-5'
+    - cron: '47 23 * * 0-4'
+    - cron: '3 3 * * 1-5'
   workflow_dispatch:
     inputs:
+      recovery_sha:
+        description: Blob SHA of the interrupted first cycle to reconcile
+        type: string
+        default: ''
+      research:
+        description: Refresh company news and disclosures
+        type: boolean
+        default: false
       trade:
         description: Submit simulation orders during the trading window
         type: boolean
@@ -15,13 +25,9 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: aqua-team-5
-  cancel-in-progress: false
-
 jobs:
   verify:
-    if: github.event_name != 'schedule' && !inputs.trade
+    if: github.event_name != 'schedule' && !inputs.trade && !inputs.research && !inputs.recovery_sha
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -41,8 +47,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   trade:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.trade)
+    if: github.ref == 'refs/heads/main' && (github.event.schedule == '7,22,37,52 0-5 * * 1-5' || inputs.trade || inputs.recovery_sha)
     runs-on: ubuntu-latest
+    concurrency:
+      group: aqua-team-5-orders
+      cancel-in-progress: false
     timeout-minutes: 12
     permissions:
       contents: write
@@ -57,6 +66,32 @@ jobs:
       - run: python -m app.cloud_cycle
         env:
           TEAM_CODE: ${{ secrets.AQUA_TEAM_CODE }}
+          GNEWS_API_KEY: ${{ secrets.AQUA_GNEWS_API_KEY }}
+          DART_API_KEY: ${{ secrets.AQUA_DART_API_KEY }}
+          AQUA_STATE_KEY: ${{ secrets.AQUA_STATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_SHA: ${{ inputs.recovery_sha }}
+
+  research:
+    if: github.event.schedule == '47 23 * * 0-4' || github.event.schedule == '3 3 * * 1-5' || (github.event_name == 'workflow_dispatch' && inputs.research && !inputs.trade)
+    concurrency:
+      group: aqua-team-5-research
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt 'cryptography>=44,<49'
+      - run: python -m app.cloud_cycle
+        env:
+          CLOUD_RESEARCH: '1'
           GNEWS_API_KEY: ${{ secrets.AQUA_GNEWS_API_KEY }}
           DART_API_KEY: ${{ secrets.AQUA_DART_API_KEY }}
           AQUA_STATE_KEY: ${{ secrets.AQUA_STATE_KEY }}

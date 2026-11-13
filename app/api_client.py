@@ -15,6 +15,7 @@ class TradingAPI:
         self.token = None
         self.token_expiry = 0
         self.last_calls = []
+        self.request_timeout = 20
 
     def _throttle(self):
         now = time.monotonic()
@@ -84,7 +85,7 @@ class TradingAPI:
     def _send(self, method, path, headers, kwargs):
         try:
             return self.session.request(method, self.base_url + path, headers=headers,
-                                        timeout=20, **kwargs)
+                                        timeout=self.request_timeout, **kwargs)
         except requests.RequestException as exc:
             # A timed-out order may already have been accepted. Never replay it here.
             raise APIError("API 통신 실패: 주문 요청이었다면 내역 조회로 결과 확인 필요") from exc
