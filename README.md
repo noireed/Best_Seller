@@ -30,6 +30,12 @@ copy .env.example .env
 실제 키가 들어 있는 `.env`와 실행 중 생성되는 `data/`는 커밋하지 않습니다.
 
 ## 실행
+
+GitHub Actions는 기본 브랜치에서 평일 한국 시간 09:07부터 14:52까지 15분마다 5팀 모의투자 사이클을 실행합니다. 지연되어 장이 끝난 작업은 건너뜁니다. GitHub의 Actions 화면에서 `AQuA simulation`을 비활성화하면 예약 실행을 멈출 수 있습니다.
+
+예약 실행에는 저장소의 `AQUA_TEAM_CODE`, `AQUA_GNEWS_API_KEY`, `AQUA_DART_API_KEY`, `AQUA_STATE_KEY` 비밀 설정을 사용합니다. 전용 상태 브랜치에는 암호화한 주문·분석 기록을 저장합니다. 주문 결과가 불확실하거나 실행이 중단되면 다음 예약 주문을 보류하므로 서버 주문 내역과 저장 상태를 대조해야 합니다.
+
+로컬에서 실행하려면 아래 명령을 사용합니다.
 ```bash
 python -m app.main --once --scan-only
 python -m app.main --once

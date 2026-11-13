@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: '7,22,37,52 0-5 * * 1-5'
   workflow_dispatch:
+    inputs:
+      trade:
+        description: Submit simulation orders during the trading window
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,7 +21,7 @@ concurrency:
 
 jobs:
   verify:
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && !inputs.trade
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -36,7 +41,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   trade:
-    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.trade)
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:

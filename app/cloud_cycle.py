@@ -2,6 +2,7 @@
 import base64
 from collections import Counter
 from datetime import datetime, time
+import hashlib
 import io
 import json
 import os
@@ -41,7 +42,6 @@ class Checkpoint:
                                     headers={"Accept": "application/vnd.github.raw+json"}, timeout=20)
         response.raise_for_status()
         blob = response.content
-        import hashlib
         self.sha = hashlib.sha1(f"blob {len(blob)}\0".encode() + blob).hexdigest()
         payload = self.cipher.decrypt(blob)
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
@@ -91,11 +91,9 @@ def main():
         if str(api.login().get("teamId")) != "5":
             raise RuntimeError("Expected AQuA team 5")
         checkpoint = Checkpoint()
+        checkpoint.restore(directory)
         if not probe:
-            checkpoint.restore(directory)
             checkpoint.save(directory, "running")
-        else:
-            checkpoint.restore(directory)
         store = Store(settings.db_path)
         try:
             rows = TradingEngine(
