@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     dry_run: bool = True
     enable_trading: bool = False
     openai_api_key: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.1-flash-lite"
     openai_model: str = "gpt-4.1-mini"
     watchlist: str = "005930,000660,035420,035720,005380,000270,005490,051910,006400,373220,207940,068270,105560,055550,086790,012330,028260,009150,034020,003550,017670,030200,032830,000810,010130,010140,011200,011170,010950,096770,000100,128940,033780,090430,004020,006800,039490,071050,018260,021240"
     loop_seconds: int = 900

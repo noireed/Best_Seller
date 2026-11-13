@@ -182,11 +182,14 @@ def main():
         for row in rows:
             comparison = row.get("policy_comparison", {})
             economic = row.get("economic_news", {})
+            gemini = row.get("gemini_review", {})
             print(json.dumps({"symbol": row.get("symbol"), "action": row["action"], "execution": row["execution"],
                               "news": row.get("news", {}).get("status"), "dart": row.get("dart", {}).get("status"),
                               "news_adjustment": row.get("decision", {}).get("news_adjustment"),
                               "news_changed": comparison.get("news_changed_action"),
                               "dart_changed": comparison.get("dart_changed_action"),
+                              "gemini_status": gemini.get("status"), "gemini_verdict": gemini.get("verdict"),
+                              "gemini_http_status": gemini.get("http_status"),
                               "dart_checks": len(economic.get("dart_validation", {}).get("checks", []))}))
         print(json.dumps({"team": 5, "symbols": len(rows), "executions": counts}, ensure_ascii=True))
         if unresolved or counts.get("DATA_ERROR") == len(rows):

@@ -11,6 +11,7 @@ from .event_extraction import assertion_status
 from .event_history import apply_history
 from .fundamental_analysis import apply_fundamentals
 from .news import load_aliases, parse_time
+from .gemini_review import GeminiReview
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class TradingEngine:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.dart = dart
         self.risk = RiskManager(settings)
+        self.gemini = GeminiReview(getattr(settings, "gemini_api_key", ""), getattr(settings, "gemini_model", "gemini-3.1-flash-lite"))
 
     def run_cycle(self, scan_only=False):
         cutoff = self.clock()
@@ -38,6 +40,7 @@ class TradingEngine:
             for symbol, names in load_aliases(getattr(self.s, field, "{}")).items():
                 aliases.setdefault(symbol, []).extend(names)
         results = []
+        reviews_remaining = 3
         for symbol in symbols:
             try:
                 quote = prices.get(symbol, {})
@@ -112,11 +115,19 @@ class TradingEngine:
                     quantity = int(min(self.s.max_order_value_krw, cash / 1.00015, room) // price)
                 elif action == "SELL":
                     quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
+                gemini = {"status": "not_reviewed"}
+                if action == "BUY" and (quantity or scan_only) and reviews_remaining and self.gemini.key:
+                    reviews_remaining -= 1
+                    gemini = self.gemini.review(symbol, economics, dart_report, self.clock())
+                    if gemini.get("verdict") == "HOLD":
+                        action, quantity = "HOLD", 0
+                        decision = {**decision, "action": action, "reason": "Gemini 검토 보류: " + gemini["reason"]}
                 self.store.decision(symbol, tech, llm, action, decision["reason"])
                 item = {"symbol": symbol, "price": price, "action": action, "quantity": quantity,
                         "score": decision["score"], "reason": decision["reason"],
                         "technical_reason": tech.get("reason"),
                         "decision": decision, "economic_news": economics,
+                        "gemini_review": gemini,
                         "dart": dart_report or {"status": "disabled"},
                         "news": {"status": report.get("status") if report else "disabled",
                                  "count": len(report.get("articles", [])) if report else 0,

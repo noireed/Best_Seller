@@ -43,6 +43,7 @@ jobs:
         env:
           TEAM_CODE: ${{ secrets.AQUA_TEAM_CODE }}
           CLOUD_PROBE: '1'
+          GEMINI_API_KEY: ${{ secrets.AQUA_GEMINI_API_KEY }}
           AQUA_STATE_KEY: ${{ secrets.AQUA_STATE_KEY }}
           GH_TOKEN: ${{ github.token }}
 
@@ -70,6 +71,7 @@ jobs:
           DART_API_KEY: ${{ secrets.AQUA_DART_API_KEY }}
           AQUA_STATE_KEY: ${{ secrets.AQUA_STATE_KEY }}
           GH_TOKEN: ${{ github.token }}
+          GEMINI_API_KEY: ${{ secrets.AQUA_GEMINI_API_KEY }}
           RECOVERY_SHA: ${{ inputs.recovery_sha }}
 
   research:
