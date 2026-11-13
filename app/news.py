@@ -120,7 +120,7 @@ class GNewsClient:
                 self.sleep(wait)
         self.last_call = self.timer()
         try:
-            search_term = f'"{query}"' if "&" in query and '"' not in query else query
+            search_term = f'"{query}"' if any(c in query for c in "&-") and '"' not in query else query
             response = self.session.get(self.ENDPOINT,
                 params={"q": search_term, "lang": "en", "max": min(display, 10),
                         "sortby": "publishedAt", "apikey": self.api_key}, timeout=10)
