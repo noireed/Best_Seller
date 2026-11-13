@@ -106,6 +106,17 @@ def test_retry_after_http_date(tmp_path):
     assert not wrapper.health()["cooldown_active"]
 
 
+def test_rejected_query_does_not_block_other_companies(tmp_path):
+    client = raw_client()
+    articles = client.search.return_value
+    client.search.side_effect = [NewsError("invalid query", status=400), articles]
+    wrapper = durable(tmp_path, client)
+    with pytest.raises(NewsError, match="NEWS_QUERY_REJECTED"):
+        wrapper.search("invalid")
+    assert wrapper.search("Samsung") == articles
+    assert not wrapper.health()["cooldown_active"]
+
+
 def test_local_spacing_is_shared_across_instances(tmp_path):
     clock = Clock()
     durable(tmp_path, clock=clock).search("Samsung")
