@@ -42,7 +42,8 @@ python -m pytest -q
 
 ## 구성
 - API 인증, 종목 검색, 시세/캔들/호가/포트폴리오/주문 내역/리더보드 조회
-- EMA20/EMA50, RSI14, 20봉 모멘텀 정량 분석
+- 일봉 종가가 EMA20 위이고 EMA20이 EMA50 위일 때, 20봉 수익률이 양수이고 Wilder RSI14가 50~70이면 매수 후보로 평가합니다. 종가가 EMA20 아래이고 20봉 수익률이 음수이며 RSI14가 50 미만이면 매도 후보로 평가합니다. 이 조합은 실습 전략의 규칙입니다. [Fidelity EMA](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/ema) · [Charles Schwab 기술 지표](https://www.schwab.com/learn/story/choosing-technical-indicators-to-analyze-stocks)
+- 매수 수량은 현금 유보분을 뺀 자산을 감시 종목 수로 나눈 종목 목표액에서 기존 보유액을 빼고, 가용 현금과 주문 한도를 적용해 계산합니다. 매도는 가용 보유 수량과 주문 한도를 적용합니다.
 - 선택적 OpenAI LLM 보조 판단. 사용 가능하고 신뢰도 조건을 충족하면 정량 80% + LLM 20%, 그 외에는 정량 점수를 기준으로 사용
 - GNews 영문 뉴스 수집과 종목 관련성·중복·발행/수집 시각·공급 지연 검사
 - 이익·매출·계약·주주환원·운영 위험의 규칙 기반 분석과 매출 변화율 추출
@@ -63,7 +64,7 @@ python -m pytest -q
 - `MAX_POSITION_PCT=0.15` 종목별 최대 비중
 - `MAX_ORDER_VALUE_KRW=2000000` 단일 주문 최대 금액
 - `CASH_RESERVE_PCT=0.10` 현금 최소 보유 비율
-- `WATCHLIST=005930,000660,035420`
+- `WATCHLIST` 기본값은 `.env.example`의 국내 주식 20종목입니다.
 - `NEWS_ENABLED=true`, `NEWS_PROVIDERS=gnews` 뉴스 분석 활성화
 - `NEWS_USE_IN_LLM=false` 뉴스의 LLM 직접 입력 비활성화
 - `GNEWS_DAILY_BUDGET=80` 로컬 일일 호출 예산

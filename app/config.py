@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     enable_trading: bool = False
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
-    watchlist: str = "005930,000660,035420"
+    watchlist: str = "005930,000660,035420,035720,005380,000270,005490,051910,006400,373220,207940,068270,105560,055550,086790,012330,028260,009150,034020,003550"
     loop_seconds: int = 900
     candle_count: int = 100
     max_position_pct: float = Field(default=0.15, ge=0.01, le=1.0)
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     @property
     def symbols(self):
-        return [x.strip() for x in self.watchlist.split(",") if x.strip()]
+        return list(dict.fromkeys(x.strip() for x in self.watchlist.split(",") if x.strip()))
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

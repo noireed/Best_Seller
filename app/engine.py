@@ -24,9 +24,10 @@ class TradingEngine:
 
     def run_cycle(self, scan_only=False):
         cutoff = self.clock()
+        symbols = self.s.symbols
         try:
             portfolio, limits = self.api.portfolio(), self.api.limits()
-            rows = self.api.prices(self.s.symbols)["result"]
+            rows = self.api.prices(symbols)["result"]
             prices = {row["symbol"]: row for row in rows}
         except Exception as exc:
             log.warning("사이클 조회 실패: %s", type(exc).__name__)
@@ -37,7 +38,7 @@ class TradingEngine:
             for symbol, names in load_aliases(getattr(self.s, field, "{}")).items():
                 aliases.setdefault(symbol, []).extend(names)
         results = []
-        for symbol in self.s.symbols:
+        for symbol in symbols:
             try:
                 quote = prices.get(symbol, {})
                 price = int(quote.get("price", 0))
@@ -103,14 +104,18 @@ class TradingEngine:
                 holding = next((h for h in portfolio.get("holdings", []) if h["symbol"] == symbol), {})
                 quantity = 0
                 if action == "BUY":
-                    cash = max(0, portfolio.get("availableCash", 0) - portfolio.get("totalAssetValue", 0) * self.s.cash_reserve_pct)
-                    room = max(0, portfolio.get("totalAssetValue", 0) * self.s.max_position_pct - holding.get("quantity", 0) * price)
+                    total = portfolio.get("totalAssetValue", 0)
+                    reserve = total * self.s.cash_reserve_pct
+                    cash = max(0, portfolio.get("availableCash", 0) - reserve)
+                    target = min(total * self.s.max_position_pct, (total - reserve) / len(symbols))
+                    room = max(0, target - holding.get("quantity", 0) * price)
                     quantity = int(min(self.s.max_order_value_krw, cash / 1.00015, room) // price)
                 elif action == "SELL":
                     quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
                 self.store.decision(symbol, tech, llm, action, decision["reason"])
                 item = {"symbol": symbol, "price": price, "action": action, "quantity": quantity,
                         "score": decision["score"], "reason": decision["reason"],
+                        "technical_reason": tech.get("reason"),
                         "decision": decision, "economic_news": economics,
                         "dart": dart_report or {"status": "disabled"},
                         "news": {"status": report.get("status") if report else "disabled",
