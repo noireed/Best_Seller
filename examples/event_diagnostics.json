@@ -1,0 +1,577 @@
+{
+  "kind": "SYNTHETIC_EVENT_DIAGNOSTICS",
+  "cases": [
+    {
+      "id": "diagnostic-1",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 영업이익 20% 증가",
+      "url": "https://synthetic.example/1",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement"
+        ],
+        "assertion": "reported",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 20,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "unspecified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-2",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 영업이익 20% 증가 전망",
+      "url": "https://synthetic.example/2",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement"
+        ],
+        "assertion": "forecast",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 20,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "unspecified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-3",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 영업이익 20% 증가 전망 철회",
+      "url": "https://synthetic.example/3",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement"
+        ],
+        "assertion": "withdrawn",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 20,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "unspecified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-4",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 영업이익 20% 증가 보도 부인",
+      "url": "https://synthetic.example/4",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement"
+        ],
+        "assertion": "denied",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 20,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "unspecified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-5",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 영업이익 20% 증가 가능성",
+      "url": "https://synthetic.example/5",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement"
+        ],
+        "assertion": "uncertain",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 20,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "unspecified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-6",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics operating profit rose 15 percent YoY",
+      "url": "https://synthetic.example/6",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement"
+        ],
+        "assertion": "reported",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 15,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "year_on_year"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-7",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics operating profit fell 7% QoQ",
+      "url": "https://synthetic.example/7",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_deterioration"
+        ],
+        "assertion": "reported",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 7,
+            "unit": "percent",
+            "direction": "decrease",
+            "comparison_basis": "quarter_on_quarter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-8",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics revenue is expected to grow 10% YoY",
+      "url": "https://synthetic.example/8",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "revenue_increase"
+        ],
+        "assertion": "forecast",
+        "figures": [
+          {
+            "metric": "revenue",
+            "value": 10,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "year_on_year"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-9",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics withdraws profit growth forecast",
+      "url": "https://synthetic.example/9",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement"
+        ],
+        "assertion": "withdrawn",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-10",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics denies factory fire",
+      "url": "https://synthetic.example/10",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "operating_risk"
+        ],
+        "assertion": "denied",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-11",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics may announce share buyback",
+      "url": "https://synthetic.example/11",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "capital_return"
+        ],
+        "assertion": "uncertain",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-12",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 신제품 공개",
+      "url": "https://synthetic.example/12",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [],
+        "assertion": "none",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-13",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "다른 기업 영업이익 20% 증가",
+      "url": "https://synthetic.example/13",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [],
+        "assertion": "none",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-14",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 전년 대비 매출 12.5% 증가",
+      "url": "https://synthetic.example/14",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "revenue_increase"
+        ],
+        "assertion": "reported",
+        "figures": [
+          {
+            "metric": "revenue",
+            "value": 12.5,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "year_on_year"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-15",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 영업이익 20% 감소",
+      "url": "https://synthetic.example/15",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_deterioration"
+        ],
+        "assertion": "reported",
+        "figures": [
+          {
+            "metric": "operating_profit",
+            "value": 20,
+            "unit": "percent",
+            "direction": "decrease",
+            "comparison_basis": "unspecified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-16",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 공급계약 체결",
+      "url": "https://synthetic.example/16",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "contract_win"
+        ],
+        "assertion": "reported",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-17",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 계약 해지 부인",
+      "url": "https://synthetic.example/17",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "contract_loss"
+        ],
+        "assertion": "denied",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-18",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 자사주 소각",
+      "url": "https://synthetic.example/18",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "capital_return"
+        ],
+        "assertion": "reported",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-19",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics production halt expected",
+      "url": "https://synthetic.example/19",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "operating_risk"
+        ],
+        "assertion": "forecast",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-20",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 흑자 전환; 삼성전자 공장 화재",
+      "url": "https://synthetic.example/20",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement",
+          "operating_risk"
+        ],
+        "assertion": "reported",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-21",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 흑자 전환; 삼성전자 공장 화재 전망",
+      "url": "https://synthetic.example/21",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "earnings_improvement",
+          "operating_risk"
+        ],
+        "assertion": "mixed",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-22",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "삼성전자 신제품 출시; 다른 기업 적자 전환",
+      "url": "https://synthetic.example/22",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [],
+        "assertion": "none",
+        "figures": []
+      }
+    },
+    {
+      "id": "diagnostic-23",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics revenue grew 10% YoY and QoQ",
+      "url": "https://synthetic.example/23",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "revenue_increase"
+        ],
+        "assertion": "reported",
+        "figures": [
+          {
+            "metric": "revenue",
+            "value": 10,
+            "unit": "percent",
+            "direction": "increase",
+            "comparison_basis": "ambiguous"
+          }
+        ]
+      }
+    },
+    {
+      "id": "diagnostic-24",
+      "symbol": "005930",
+      "aliases": [
+        "삼성전자",
+        "Samsung Electronics"
+      ],
+      "title": "Samsung Electronics revenue will fall 10 percent",
+      "url": "https://synthetic.example/24",
+      "provider": "fixture",
+      "split": "development",
+      "annotator": "manually_specified_synthetic_diagnostic",
+      "expected": {
+        "events": [
+          "revenue_decrease"
+        ],
+        "assertion": "forecast",
+        "figures": [
+          {
+            "metric": "revenue",
+            "value": 10,
+            "unit": "percent",
+            "direction": "decrease",
+            "comparison_basis": "unspecified"
+          }
+        ]
+      }
+    }
+  ]
+}

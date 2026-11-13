@@ -5,22 +5,29 @@ from .indicators import technical_signal
 from .risk_manager import RiskManager
 from .economic_news import economic_indicators
 from .decision_policy import decide
+from .dart_analysis import validate_news
+from .policy_comparison import compare_case, policy_settings
+from .event_extraction import assertion_status
+from .event_history import apply_history
+from .fundamental_analysis import apply_fundamentals
 from .news import load_aliases, parse_time
 
 log = logging.getLogger(__name__)
 
 
 class TradingEngine:
-    def __init__(self, settings, api, llm, store, news=None, clock=None):
+    def __init__(self, settings, api, llm, store, news=None, clock=None, dart=None):
         self.s, self.api, self.llm, self.store, self.news = settings, api, llm, store, news
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.dart = dart
         self.risk = RiskManager(settings)
 
     def run_cycle(self, scan_only=False):
         cutoff = self.clock()
+        symbols = self.s.symbols
         try:
             portfolio, limits = self.api.portfolio(), self.api.limits()
-            rows = self.api.prices(self.s.symbols)["result"]
+            rows = self.api.prices(symbols)["result"]
             prices = {row["symbol"]: row for row in rows}
         except Exception as exc:
             log.warning("사이클 조회 실패: %s", type(exc).__name__)
@@ -31,7 +38,7 @@ class TradingEngine:
             for symbol, names in load_aliases(getattr(self.s, field, "{}")).items():
                 aliases.setdefault(symbol, []).extend(names)
         results = []
-        for symbol in self.s.symbols:
+        for symbol in symbols:
             try:
                 quote = prices.get(symbol, {})
                 price = int(quote.get("price", 0))
@@ -51,10 +58,41 @@ class TradingEngine:
                     max_age_hours=getattr(self.s, "news_max_age_hours", 48),
                     allow_delayed=getattr(self.s, "news_allow_delayed_in_strategy", True),
                     min_sources=getattr(self.s, "news_min_sources", 2))
+                dart_report = None
+                if self.dart:
+                    try:
+                        dart_report = self.dart.collect(symbol)
+                    except Exception:
+                        dart_report = {"symbol": symbol, "status": "unavailable", "reason": "DART_SERVICE_ERROR"}
+                economics = validate_news(economics, dart_report, now=self.clock(),
+                                          min_sources=getattr(self.s, "news_min_sources", 2))
+                history_snapshot = None
+                if report and getattr(self.s, "event_history_enabled", True):
+                    try:
+                        snapshot = self.store.record_event_history(report, aliases.get(symbol, []), now=self.clock(),
+                            max_age_hours=getattr(self.s, "news_max_age_hours", 48))
+                        if isinstance(snapshot, dict):
+                            history_snapshot = snapshot
+                    except Exception:
+                        history_snapshot = {"status": "unavailable", "reason": "history_storage_error"}
+                economics = apply_history(economics, history_snapshot, now=self.clock(),
+                    half_life_hours=getattr(self.s, "news_half_life_hours", 12),
+                    max_age_hours=getattr(self.s, "news_max_age_hours", 48), min_sources=getattr(self.s, "news_min_sources", 2))
+                economics = apply_fundamentals(economics, dart_report, now=self.clock(),
+                    enabled=getattr(self.s, "fundamental_guard_enabled", True), min_sources=getattr(self.s, "news_min_sources", 2))
                 summary = {k: portfolio.get(k) for k in ("totalAssetValue", "availableCash", "holdings")}
                 context = None
                 if report and report.get("status") == "ok" and getattr(self.s, "news_use_in_llm", False):
-                    eligible = [a for a in report["articles"] if a.get("provider") in ("gnews", "fixture")
+                    blocked_urls = economics["dart_validation"]["blocked_urls"]
+                    blocked_urls = set(blocked_urls) | set(economics["event_history"]["blocked_urls"])
+                    blocked_urls |= set(economics["fundamental_guard"]["adjusted_urls"])
+                    blocked_urls |= {e["url"] for e in economics["excluded"] if "company" in e["reason"] or "subsidiary" in e["reason"] or "preferred_share" in e["reason"]}
+                    uncertain_urls = {e["url"] for e in economics["evidence"] if e.get("uncertain")}
+                    uncertain_urls |= {e["url"] for e in economics["evidence"] if e.get("rejected_events")}
+                    eligible = [a for a in report["articles"] if a.get("url") not in blocked_urls
+                                and a.get("url") not in uncertain_urls
+                                and assertion_status(a.get("title", "")) == "reported"
+                                and a.get("provider") in ("gnews", "fixture")
                                 and a.get("observed_at") and parse_time(a["observed_at"]) <= self.clock()
                                 and (not a.get("delay_hours", 0) or getattr(self.s, "news_allow_delayed_in_llm", False))]
                     if eligible:
@@ -66,18 +104,36 @@ class TradingEngine:
                 holding = next((h for h in portfolio.get("holdings", []) if h["symbol"] == symbol), {})
                 quantity = 0
                 if action == "BUY":
-                    cash = max(0, portfolio.get("availableCash", 0) - portfolio.get("totalAssetValue", 0) * self.s.cash_reserve_pct)
-                    room = max(0, portfolio.get("totalAssetValue", 0) * self.s.max_position_pct - holding.get("quantity", 0) * price)
+                    total = portfolio.get("totalAssetValue", 0)
+                    reserve = total * self.s.cash_reserve_pct
+                    cash = max(0, portfolio.get("availableCash", 0) - reserve)
+                    target = min(total * self.s.max_position_pct, (total - reserve) / len(symbols))
+                    room = max(0, target - holding.get("quantity", 0) * price)
                     quantity = int(min(self.s.max_order_value_krw, cash / 1.00015, room) // price)
                 elif action == "SELL":
                     quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
                 self.store.decision(symbol, tech, llm, action, decision["reason"])
                 item = {"symbol": symbol, "price": price, "action": action, "quantity": quantity,
                         "score": decision["score"], "reason": decision["reason"],
+                        "technical_reason": tech.get("reason"),
                         "decision": decision, "economic_news": economics,
+                        "dart": dart_report or {"status": "disabled"},
                         "news": {"status": report.get("status") if report else "disabled",
                                  "count": len(report.get("articles", [])) if report else 0,
                                  "used_in_llm": bool(context)}, "execution": "SCAN_ONLY"}
+                if getattr(self.s, "research_comparison_enabled", True):
+                    research_time = self.clock().isoformat()
+                    research_input = {"id": symbol + ":" + research_time, "symbol": symbol,
+                        "as_of": research_time, "aliases": aliases.get(symbol, []),
+                        "technical": tech, "news": report, "dart": dart_report}
+                    research_input["event_history"] = history_snapshot
+                    try:
+                        research_input["policy_settings"] = policy_settings(self.s)
+                        item["policy_comparison"] = compare_case(research_input, self.s)
+                        item["research_input"] = research_input
+                    except Exception:
+                        # A research/export failure must not interrupt the trading policy.
+                        item["policy_comparison"] = {"status": "unavailable"}
                 if not scan_only and quantity:
                     try:
                         quote_age = (self.clock() - parse_time(quote["timestamp"])).total_seconds()
