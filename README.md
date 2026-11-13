@@ -64,7 +64,7 @@ python -m pytest -q
 - `MAX_POSITION_PCT=0.15` 종목별 최대 비중
 - `MAX_ORDER_VALUE_KRW=2000000` 단일 주문 최대 금액
 - `CASH_RESERVE_PCT=0.10` 현금 최소 보유 비율
-- `WATCHLIST` 기본값은 `.env.example`의 국내 주식 20종목입니다.
+- `WATCHLIST` 기본값은 `.env.example`의 국내 주식 40종목입니다.
 - `NEWS_ENABLED=true`, `NEWS_PROVIDERS=gnews` 뉴스 분석 활성화
 - `NEWS_USE_IN_LLM=false` 뉴스의 LLM 직접 입력 비활성화
 - `GNEWS_DAILY_BUDGET=80` 로컬 일일 호출 예산
