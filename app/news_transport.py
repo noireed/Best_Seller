@@ -108,6 +108,11 @@ class DurableNewsClient:
         except Exception as exc:
             now = self._now()
             status = exc.status if isinstance(exc, NewsError) else None
+            if status == 400:
+                with self._connect() as db:
+                    db.execute("INSERT INTO news_attempts(account,at,request,status) VALUES(?,?,?,?)",
+                               (self.namespace, now.isoformat(), request, "400"))
+                raise NewsError("NEWS_QUERY_REJECTED: HTTP 400", status=400) from None
             if status == 403:
                 until = datetime.combine(now.date()+timedelta(days=1), datetime.min.time(), timezone.utc).timestamp()
             else:

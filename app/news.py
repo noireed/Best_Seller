@@ -120,8 +120,9 @@ class GNewsClient:
                 self.sleep(wait)
         self.last_call = self.timer()
         try:
+            search_term = f'"{query}"' if "&" in query and '"' not in query else query
             response = self.session.get(self.ENDPOINT,
-                params={"q": query, "lang": "en", "max": min(display, 10),
+                params={"q": search_term, "lang": "en", "max": min(display, 10),
                         "sortby": "publishedAt", "apikey": self.api_key}, timeout=10)
             if response.status_code != 200:
                 raise NewsError(f"GNews API HTTP {response.status_code}", status=response.status_code,
