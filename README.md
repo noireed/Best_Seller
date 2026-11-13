@@ -3,6 +3,20 @@
 모의투자 API를 사용하는 LLM + 정량분석 하이브리드 자동매매 프로젝트입니다.
 종목별 뉴스를 수집하고 경제사건을 분석해 매매 판단의 보조지표로 사용합니다.
 
+## 모의투자 전략
+
+기본 감시 대상은 국내 주식 40종목입니다. 일봉으로 추세와 모멘텀을 확인하고, 조건이 맞을 때 가용 현금이나 보유 수량에 맞춰 주문 수량을 계산합니다.
+
+| 판단 | 가격 지표 기준 |
+| --- | --- |
+| 매수 후보 | 종가 > EMA20 > EMA50, 최근 20거래일 수익률이 양수, RSI14가 50~70 |
+| 매도 후보 | 종가 < EMA20, 최근 20거래일 수익률이 음수, RSI14가 50 미만 |
+| 보류 | 가격 조건이 맞지 않거나 데이터가 부족한 경우 |
+
+매수 목표액은 현금 유보분을 뺀 총자산을 감시종목 수로 나눠 계산하며, 종목 비중 한도도 적용합니다. 목표액에서 기존 보유액을 뺀 뒤 가용 현금과 주문 한도에 맞춰 수량을 계산합니다. 매도 수량에는 매도 가능한 보유 수량과 주문 한도를 적용합니다. 지표 설명은 [Fidelity EMA](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/ema)와 [Charles Schwab 기술 지표](https://www.schwab.com/learn/story/choosing-technical-indicators-to-analyze-stocks)를 참고했습니다.
+
+2026년 11월 13일 5팀 계정에서 자동으로 제출한 셀트리온 9주 매수 주문의 전량 체결을 확인했습니다. 이 주문은 감시종목 20개 설정에서 실행했으며, 확장한 40종목은 조회 전용으로 분석을 확인했습니다.
+
 **안전 기본값:** `DRY_RUN=true`, `ENABLE_TRADING=false`입니다. 주문 API를 호출하지 않는 상태로 시작합니다. 이 프로젝트는 제공된 모의투자 API 전용이며 실계좌 주문 기능은 없습니다.
 
 ## 설치
@@ -21,6 +35,8 @@ python -m app.main --once --scan-only
 python -m app.main --once
 python -m app.main
 ```
+
+`--once --scan-only`는 조회와 분석을 한 번 실행합니다. 주문을 활성화한 상태에서는 `--once`로 한 사이클, 옵션 없이 반복 실행합니다. 반복 실행은 사이클 완료 후 기본 15분 간격이며, 종료할 때는 `Ctrl+C`를 누릅니다.
 
 뉴스 수집과 로컬 API 사용 현황은 별도로 확인할 수 있습니다. 아래 명령은 주문하지 않습니다.
 ```bash
@@ -42,8 +58,6 @@ python -m pytest -q
 
 ## 구성
 - API 인증, 종목 검색, 시세/캔들/호가/포트폴리오/주문 내역/리더보드 조회
-- 일봉 종가가 EMA20 위이고 EMA20이 EMA50 위일 때, 20봉 수익률이 양수이고 Wilder RSI14가 50~70이면 매수 후보로 평가합니다. 종가가 EMA20 아래이고 20봉 수익률이 음수이며 RSI14가 50 미만이면 매도 후보로 평가합니다. 이 조합은 실습 전략의 규칙입니다. [Fidelity EMA](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/ema) · [Charles Schwab 기술 지표](https://www.schwab.com/learn/story/choosing-technical-indicators-to-analyze-stocks)
-- 매수 수량은 현금 유보분을 뺀 자산을 감시 종목 수로 나눈 종목 목표액에서 기존 보유액을 빼고, 가용 현금과 주문 한도를 적용해 계산합니다. 매도는 가용 보유 수량과 주문 한도를 적용합니다.
 - 선택적 OpenAI LLM 보조 판단. 사용 가능하고 신뢰도 조건을 충족하면 정량 80% + LLM 20%, 그 외에는 정량 점수를 기준으로 사용
 - GNews 영문 뉴스 수집과 종목 관련성·중복·발행/수집 시각·공급 지연 검사
 - 이익·매출·계약·주주환원·운영 위험의 규칙 기반 분석과 매출 변화율 추출
