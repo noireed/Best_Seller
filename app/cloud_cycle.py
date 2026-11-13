@@ -85,10 +85,13 @@ class ResearchSnapshot:
 
     def collect(self, symbol):
         row = self.rows.get(symbol)
-        if row and parse_time(row["checked_at"]) <= datetime.now(ZoneInfo("UTC")) <= parse_time(row["checked_at"]) + self.max_age:
-            return row[self.source]
+        now = datetime.now(ZoneInfo("UTC"))
+        if row and parse_time(row["checked_at"]) <= now <= parse_time(row["checked_at"]) + self.max_age:
+            report = row[self.source]
+            if self.source != "news" or all(parse_time(a["observed_at"]) <= now for a in report["articles"]):
+                return report
         return {"symbol": symbol, "status": "unavailable", "articles": [],
-                "as_of": datetime.now(ZoneInfo("UTC")).isoformat(), "reason": "research_snapshot_missing_or_stale"}
+                "as_of": now.isoformat(), "reason": "research_snapshot_missing_or_stale"}
 
 
 def refresh_research(directory, settings):
@@ -133,6 +136,7 @@ def main():
             refresh_research(directory, settings)
             return
         api = TradingAPI(HOST, settings.team_code)
+        api.request_timeout = 8
         if str(api.login().get("teamId")) != "5":
             raise RuntimeError("Expected AQuA team 5")
         checkpoint = Checkpoint()

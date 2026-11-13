@@ -1,7 +1,7 @@
 name: AQuA simulation
 on:
   push:
-    branches: [feature/dart-financial-validation]
+    branches: [fix/cloud-research]
     paths: [.github/workflows/simulation.yml, app/cloud_cycle.py]
   schedule:
     - cron: '7,22,37,52 0-5 * * 1-5'
@@ -20,10 +20,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: aqua-team-5
-  cancel-in-progress: false
 
 jobs:
   verify:
@@ -49,6 +45,9 @@ jobs:
   trade:
     if: github.ref == 'refs/heads/main' && (github.event.schedule == '7,22,37,52 0-5 * * 1-5' || inputs.trade)
     runs-on: ubuntu-latest
+    concurrency:
+      group: aqua-team-5-orders
+      cancel-in-progress: false
     timeout-minutes: 12
     permissions:
       contents: write
