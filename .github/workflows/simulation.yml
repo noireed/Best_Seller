@@ -9,6 +9,10 @@ on:
     - cron: '3 3 * * 1-5'
   workflow_dispatch:
     inputs:
+      recovery_sha:
+        description: Blob SHA of the interrupted first cycle to reconcile
+        type: string
+        default: ''
       research:
         description: Refresh company news and disclosures
         type: boolean
@@ -23,7 +27,7 @@ permissions:
 
 jobs:
   verify:
-    if: github.event_name != 'schedule' && !inputs.trade && !inputs.research
+    if: github.event_name != 'schedule' && !inputs.trade && !inputs.research && !inputs.recovery_sha
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   trade:
-    if: github.ref == 'refs/heads/main' && (github.event.schedule == '7,22,37,52 0-5 * * 1-5' || inputs.trade)
+    if: github.ref == 'refs/heads/main' && (github.event.schedule == '7,22,37,52 0-5 * * 1-5' || inputs.trade || inputs.recovery_sha)
     runs-on: ubuntu-latest
     concurrency:
       group: aqua-team-5-orders
@@ -66,6 +70,7 @@ jobs:
           DART_API_KEY: ${{ secrets.AQUA_DART_API_KEY }}
           AQUA_STATE_KEY: ${{ secrets.AQUA_STATE_KEY }}
           GH_TOKEN: ${{ github.token }}
+          RECOVERY_SHA: ${{ inputs.recovery_sha }}
 
   research:
     if: github.event.schedule == '47 23 * * 0-4' || github.event.schedule == '3 3 * * 1-5' || (github.event_name == 'workflow_dispatch' && inputs.research && !inputs.trade)

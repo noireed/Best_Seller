@@ -42,7 +42,7 @@ class Checkpoint:
         self.files = RESEARCH_FILES if research else ("trading.db",)
         self.sha = None
 
-    def restore(self, directory, *, optional=False):
+    def restore(self, directory, *, optional=False, recovery_sha=None):
         response = self.session.get(self.url, params={"ref": STATE_BRANCH},
                                     headers={"Accept": "application/vnd.github.raw+json"}, timeout=20)
         if optional and response.status_code == 404:
@@ -52,7 +52,7 @@ class Checkpoint:
         self.sha = hashlib.sha1(f"blob {len(blob)}\0".encode() + blob).hexdigest()
         payload = self.cipher.decrypt(blob)
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            if archive.read("status") != b"ready":
+            if archive.read("status") != b"ready" and self.sha != recovery_sha:
                 raise RuntimeError("Previous cycle requires order reconciliation")
             for name in self.files:
                 if name in archive.namelist():
@@ -116,8 +116,9 @@ def refresh_research(directory, settings):
 def main():
     probe = os.environ.get("CLOUD_PROBE") == "1"
     research = os.environ.get("CLOUD_RESEARCH") == "1"
+    recovery_sha = os.environ.get("RECOVERY_SHA")
     now = datetime.now(ZoneInfo("Asia/Seoul"))
-    if not (probe or research) and (now.weekday() >= 5 or not time(9) <= now.time() < time(15)):
+    if not (probe or research or recovery_sha) and (now.weekday() >= 5 or not time(9) <= now.time() < time(15)):
         print("Skipped outside simulation trading hours")
         return
     with TemporaryDirectory() as temp:
@@ -140,6 +141,19 @@ def main():
         if str(api.login().get("teamId")) != "5":
             raise RuntimeError("Expected AQuA team 5")
         checkpoint = Checkpoint()
+        if recovery_sha:
+            checkpoint.restore(directory, recovery_sha=recovery_sha)
+            if checkpoint.sha != recovery_sha:
+                raise RuntimeError("Recovery checkpoint changed")
+            orders = api.orders(size=100)
+            if (orders.get("totalPages") != 1 or len(orders["orders"]) != 1
+                    or str(orders["orders"][0]["orderId"]) != "100"
+                    or orders["orders"][0]["status"] != "FILLED"
+                    or orders["orders"][0]["filledQuantity"] != 9):
+                raise RuntimeError("Orders differ from the reconciled first-cycle history")
+            checkpoint.save(directory, "ready")
+            print("Recovered checkpoint after confirming the only server order is the earlier filled order")
+            return
         if not probe:
             checkpoint.restore(directory)
         Checkpoint(research=True).restore(directory, optional=True)
