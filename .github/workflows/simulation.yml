@@ -1,0 +1,58 @@
+name: AQuA simulation
+on:
+  push:
+    branches: [feature/dart-financial-validation]
+    paths: [.github/workflows/simulation.yml, app/cloud_cycle.py]
+  schedule:
+    - cron: '7,22,37,52 0-5 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aqua-team-5
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt 'cryptography>=44,<49'
+      - run: python -m pytest -q
+      - run: python -m app.cloud_cycle
+        env:
+          TEAM_CODE: ${{ secrets.AQUA_TEAM_CODE }}
+          CLOUD_PROBE: '1'
+          AQUA_STATE_KEY: ${{ secrets.AQUA_STATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+
+  trade:
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt 'cryptography>=44,<49'
+      - run: python -m app.cloud_cycle
+        env:
+          TEAM_CODE: ${{ secrets.AQUA_TEAM_CODE }}
+          GNEWS_API_KEY: ${{ secrets.AQUA_GNEWS_API_KEY }}
+          DART_API_KEY: ${{ secrets.AQUA_DART_API_KEY }}
+          AQUA_STATE_KEY: ${{ secrets.AQUA_STATE_KEY }}
+          GH_TOKEN: ${{ github.token }}
