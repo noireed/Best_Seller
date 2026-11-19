@@ -2,11 +2,12 @@ from datetime import datetime, timedelta
 import json
 import subprocess
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
 from app import cloud_cycle, cloud_session
+from app.api_client import APIError
 
 
 def session_clock(monkeypatch, value):
@@ -92,6 +93,67 @@ def test_failed_cycle_stops_before_repeating_orders(monkeypatch, failure):
     with pytest.raises(type(failure)):
         cloud_session.run_session()
     cycle.assert_called_once()
+
+
+def test_data_failure_retries_after_one_minute(monkeypatch, capsys):
+    clock = session_clock(monkeypatch, "2026-11-19T10:00:00+09:00")
+    starts = []
+
+    def cycle(*args, **kwargs):
+        starts.append(clock.value)
+        if len(starts) == 1:
+            raise subprocess.CalledProcessError(75, "cycle")
+        clock.value = clock.value.replace(hour=15)
+
+    monkeypatch.setattr(cloud_session.subprocess, "run", cycle)
+    cloud_session.run_session()
+    assert (starts[1] - starts[0]).total_seconds() == 60
+    assert "cycle_retry" in capsys.readouterr().out
+
+
+def test_data_failure_preserves_ready_checkpoint_without_success_timestamp(monkeypatch):
+    session_clock(monkeypatch, "2026-11-19T10:00:00+09:00")
+    for field in ("CLOUD_PROBE", "CLOUD_RESEARCH", "RECOVERY_SHA"):
+        monkeypatch.delenv(field, raising=False)
+    checkpoint = Mock()
+    saved = []
+
+    def save(directory, status):
+        saved.append(status)
+        assert not (directory / "cycle.json").exists()
+
+    checkpoint.save.side_effect = save
+    monkeypatch.setattr(cloud_cycle, "Checkpoint", Mock(return_value=checkpoint))
+    api = Mock()
+    api.login.return_value = {"teamId": 5}
+    monkeypatch.setattr(cloud_cycle, "TradingAPI", Mock(return_value=api))
+    store = MagicMock()
+    store.unresolved_orders.return_value = 0
+    monkeypatch.setattr(cloud_cycle, "Store", Mock(return_value=store))
+    engine = Mock()
+    engine.run_cycle.return_value = [{"action": "HOLD", "quantity": 0, "execution": "DATA_ERROR"}]
+    monkeypatch.setattr(cloud_cycle, "TradingEngine", Mock(return_value=engine))
+    with pytest.raises(SystemExit) as result:
+        cloud_cycle.main()
+    assert result.value.code == 75
+    assert saved == ["running", "ready"]
+    api.place_order.assert_not_called()
+
+
+@pytest.mark.parametrize("status", [None, 429, 503, 401])
+def test_login_retries_transient_failures_and_stops_bad_credentials(monkeypatch, status):
+    session_clock(monkeypatch, "2026-11-19T10:00:00+09:00")
+    for field in ("CLOUD_PROBE", "CLOUD_RESEARCH", "RECOVERY_SHA"):
+        monkeypatch.delenv(field, raising=False)
+    api = Mock()
+    api.login.side_effect = APIError("failure", status=status)
+    monkeypatch.setattr(cloud_cycle, "TradingAPI", Mock(return_value=api))
+    expected = APIError if status == 401 else SystemExit
+    with pytest.raises(expected) as result:
+        cloud_cycle.main()
+    if expected is SystemExit:
+        assert result.value.code == 75
+    api.place_order.assert_not_called()
 
 
 @pytest.mark.parametrize("age", [0, 899])

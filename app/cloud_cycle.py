@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import requests
 from cryptography.fernet import Fernet
 
-from .api_client import TradingAPI
+from .api_client import APIError, TradingAPI
 from .config import Settings
 from .dart import build_dart_service
 from .engine import TradingEngine
@@ -138,7 +138,14 @@ def main():
             return
         api = TradingAPI(HOST, settings.team_code)
         api.request_timeout = 8
-        if str(api.login().get("teamId")) != "5":
+        try:
+            team_id = api.login().get("teamId")
+        except APIError as exc:
+            if exc.status is None or exc.status == 429 or exc.status >= 500:
+                print(json.dumps({"status": "login_retry", "http_status": exc.status}), flush=True)
+                raise SystemExit(75) from exc
+            raise
+        if str(team_id) != "5":
             raise RuntimeError("Expected AQuA team 5")
         checkpoint = Checkpoint()
         if recovery_sha:
@@ -186,9 +193,11 @@ def main():
                 store.db.execute("VACUUM")
         finally:
             store.db.close()
+        data_failed = bool(rows) and all(row.get("execution") == "DATA_ERROR" for row in rows)
         if not probe:
-            (directory / "cycle.json").write_text(
-                json.dumps({"started_at": now.isoformat()}), encoding="utf-8")
+            if not data_failed:
+                (directory / "cycle.json").write_text(
+                    json.dumps({"started_at": now.isoformat()}), encoding="utf-8")
             checkpoint.save(directory, "blocked" if unresolved else "ready")
         counts = Counter(row.get("execution") for row in rows)
         for row in rows:
@@ -204,8 +213,10 @@ def main():
                               "gemini_http_status": gemini.get("http_status"),
                               "dart_checks": len(economic.get("dart_validation", {}).get("checks", []))}))
         print(json.dumps({"team": 5, "symbols": len(rows), "executions": counts}, ensure_ascii=True))
-        if unresolved or counts.get("DATA_ERROR") == len(rows):
-            raise RuntimeError("Simulation cycle requires review")
+        if unresolved:
+            raise RuntimeError("Simulation cycle requires order reconciliation")
+        if data_failed:
+            raise SystemExit(75)
 
 
 if __name__ == "__main__":

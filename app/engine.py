@@ -32,7 +32,7 @@ class TradingEngine:
             rows = self.api.prices(symbols)["result"]
             prices = {row["symbol"]: row for row in rows}
         except Exception as exc:
-            log.warning("사이클 조회 실패: %s", type(exc).__name__)
+            log.warning("사이클 조회 실패: %s (HTTP %s)", type(exc).__name__, getattr(exc, "status", None))
             return [{"action": "HOLD", "quantity": 0, "execution": "DATA_ERROR",
                      "reason": "초기 조회 실패; 주문 없음"}]
         aliases = {}

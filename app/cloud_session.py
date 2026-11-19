@@ -52,8 +52,16 @@ def run_session():
             continue
         print(json.dumps({"status": "cycle_started", "at": now.isoformat()}), flush=True)
         # A timed-out cycle may contain an accepted order. Its checkpoint handles reconciliation.
-        subprocess.run([sys.executable, "-u", "-m", "app.cloud_cycle"],
-                       check=True, timeout=600)
+        try:
+            subprocess.run([sys.executable, "-u", "-m", "app.cloud_cycle"],
+                           check=True, timeout=600)
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode != 75:
+                raise
+            next_cycle = datetime.now(KST) + timedelta(seconds=60)
+            print(json.dumps({"status": "cycle_retry", "next_cycle_at": next_cycle.isoformat()}),
+                  flush=True)
+            continue
         next_cycle = now + timedelta(seconds=CYCLE_SECONDS)
         finished = datetime.now(KST)
         if next_cycle <= finished:
