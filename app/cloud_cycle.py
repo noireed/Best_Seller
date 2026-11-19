@@ -39,7 +39,7 @@ class Checkpoint:
         self.session.headers["Authorization"] = "Bearer " + os.environ["GH_TOKEN"]
         path = "research-state.enc" if research else STATE_PATH
         self.url = f"https://api.github.com/repos/{REPOSITORY}/contents/{path}"
-        self.files = RESEARCH_FILES if research else ("trading.db",)
+        self.files = RESEARCH_FILES if research else ("trading.db", "cycle.json")
         self.sha = None
 
     def restore(self, directory, *, optional=False, recovery_sha=None):
@@ -119,7 +119,7 @@ def main():
     recovery_sha = os.environ.get("RECOVERY_SHA")
     now = datetime.now(ZoneInfo("Asia/Seoul"))
     if not (probe or research or recovery_sha) and (now.weekday() >= 5 or not time(9) <= now.time() < time(15)):
-        print("Skipped outside simulation trading hours")
+        print("::notice::Skipped outside simulation trading hours at " + now.isoformat(), flush=True)
         return
     with TemporaryDirectory() as temp:
         directory = Path(temp)
@@ -156,6 +156,16 @@ def main():
             return
         if not probe:
             checkpoint.restore(directory)
+            cycle_path = directory / "cycle.json"
+            if cycle_path.exists():
+                previous = parse_time(json.loads(cycle_path.read_text(encoding="utf-8"))["started_at"])
+                elapsed = (now - previous).total_seconds()
+                if elapsed < 0:
+                    raise RuntimeError("Previous cycle timestamp is in the future")
+                if elapsed < 900:
+                    print(json.dumps({"status": "recent_cycle", "previous": previous.isoformat(),
+                                      "retry_after_seconds": 900 - elapsed}), flush=True)
+                    return
         Checkpoint(research=True).restore(directory, optional=True)
         path = directory / "research.json"
         research_rows = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -177,6 +187,8 @@ def main():
         finally:
             store.db.close()
         if not probe:
+            (directory / "cycle.json").write_text(
+                json.dumps({"started_at": now.isoformat()}), encoding="utf-8")
             checkpoint.save(directory, "blocked" if unresolved else "ready")
         counts = Counter(row.get("execution") for row in rows)
         for row in rows:

@@ -2,8 +2,10 @@ name: AQuA simulation
 on:
   push:
     branches: [fix/cloud-research]
-    paths: [.github/workflows/simulation.yml, app/cloud_cycle.py]
+    paths: [.github/workflows/simulation.yml, app/cloud_cycle.py, app/cloud_session.py, tests/test_cloud_session.py]
   schedule:
+    - cron: '17 20 * * 0-4'
+    - cron: '17 23 * * 0-4'
     - cron: '7,22,37,52 0-5 * * 1-5'
     - cron: '47 23 * * 0-4'
     - cron: '3 3 * * 1-5'
@@ -15,6 +17,10 @@ on:
         default: ''
       research:
         description: Refresh company news and disclosures
+        type: boolean
+        default: false
+      session:
+        description: Keep checking every 15 minutes until market close
         type: boolean
         default: false
       trade:
@@ -48,14 +54,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   trade:
-    if: github.ref == 'refs/heads/main' && (github.event.schedule == '7,22,37,52 0-5 * * 1-5' || inputs.trade || inputs.recovery_sha)
+    if: github.ref == 'refs/heads/main' && (github.event.schedule == '7,22,37,52 0-5 * * 1-5' || github.event.schedule == '17 20 * * 0-4' || github.event.schedule == '17 23 * * 0-4' || inputs.trade || inputs.recovery_sha)
     runs-on: ubuntu-latest
     concurrency:
       group: aqua-team-5-orders
       cancel-in-progress: false
-    timeout-minutes: 12
+    timeout-minutes: 360
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,8 +71,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt 'cryptography>=44,<49'
-      - run: python -m app.cloud_cycle
+      - run: python -u -m app.cloud_session
         env:
+          CLOUD_SESSION: ${{ !inputs.recovery_sha && (github.event_name == 'schedule' || inputs.session) }}
           TEAM_CODE: ${{ secrets.AQUA_TEAM_CODE }}
           GNEWS_API_KEY: ${{ secrets.AQUA_GNEWS_API_KEY }}
           DART_API_KEY: ${{ secrets.AQUA_DART_API_KEY }}
