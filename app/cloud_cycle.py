@@ -208,7 +208,8 @@ def main():
                     raise RuntimeError("Previous cycle timestamp is in the future")
                 if elapsed < 900:
                     print(json.dumps({"status": "recent_cycle", "previous": previous.isoformat(),
-                                      "retry_after_seconds": 900 - elapsed}), flush=True)
+                                      "retry_after_seconds": 900 - elapsed,
+                                      "next_cycle_at": (previous + timedelta(seconds=900)).isoformat()}), flush=True)
                     return
         Checkpoint(research=True).restore(directory, optional=True)
         path = directory / "research.json"

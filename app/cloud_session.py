@@ -65,6 +65,19 @@ def record_standby(now, opening):
         checkpoint.save(directory, status, message="AQuA standby until " + opening.isoformat())
 
 
+def next_due(output, fallback):
+    if not isinstance(output, str):
+        return fallback
+    for line in output.splitlines():
+        try:
+            row = json.loads(line)
+            if isinstance(row, dict) and row.get("status") == "recent_cycle" and row.get("next_cycle_at"):
+                return parse_time(row["next_cycle_at"])
+        except (ValueError, TypeError):
+            continue
+    return fallback
+
+
 def run_session(duration_seconds=None):
     deadline = timer.monotonic() + (SESSION_SECONDS if duration_seconds is None else duration_seconds)
     next_cycle = None
@@ -99,19 +112,24 @@ def run_session(duration_seconds=None):
         print(json.dumps({"status": "cycle_started", "at": now.isoformat()}), flush=True)
         # A timed-out cycle may contain an accepted order. Its checkpoint handles reconciliation.
         try:
-            subprocess.run([sys.executable, "-u", "-m", "app.cloud_cycle"],
-                           check=True, timeout=600)
+            result = subprocess.run([sys.executable, "-u", "-m", "app.cloud_cycle"],
+                                    check=True, timeout=600, stdout=subprocess.PIPE, text=True)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            if isinstance(getattr(exc, "stdout", None), str):
+                print(exc.stdout, end="", flush=True)
             if isinstance(exc, subprocess.CalledProcessError) and exc.returncode == 78:
                 raise
             next_cycle = datetime.now(KST) + timedelta(seconds=60)
             print(json.dumps({"status": "cycle_retry", "error_type": type(exc).__name__,
                               "next_cycle_at": next_cycle.isoformat()}), flush=True)
             continue
-        next_cycle = now + timedelta(seconds=CYCLE_SECONDS)
+        output = getattr(result, "stdout", "")
+        if isinstance(output, str):
+            print(output, end="", flush=True)
+        next_cycle = next_due(output, now + timedelta(seconds=CYCLE_SECONDS))
         finished = datetime.now(KST)
         if next_cycle <= finished:
-            next_cycle = finished + timedelta(seconds=CYCLE_SECONDS)
+            next_cycle = finished
         print(json.dumps({"status": "cycle_completed", "at": finished.isoformat(),
                           "next_cycle_at": next_cycle.isoformat()}), flush=True)
 

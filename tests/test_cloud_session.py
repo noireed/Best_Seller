@@ -176,6 +176,23 @@ def test_data_failure_retries_after_one_minute(monkeypatch, capsys, failure):
     assert "cycle_retry" in capsys.readouterr().out
 
 
+def test_recent_peer_cycle_keeps_its_original_due_time(monkeypatch):
+    clock = session_clock(monkeypatch, "2026-11-20T09:05:00+09:00")
+    starts = []
+
+    def cycle(*args, **kwargs):
+        starts.append(clock.value)
+        if len(starts) == 1:
+            output = json.dumps({"status": "recent_cycle", "next_cycle_at": "2026-11-20T09:15:00+09:00"})
+            return subprocess.CompletedProcess("cycle", 0, stdout=output)
+        clock.value = clock.value.replace(hour=15)
+        return subprocess.CompletedProcess("cycle", 0, stdout="")
+
+    monkeypatch.setattr(cloud_session.subprocess, "run", cycle)
+    cloud_session.run_session()
+    assert [v.strftime("%H:%M") for v in starts] == ["09:05", "09:15"]
+
+
 def test_data_failure_preserves_ready_checkpoint_without_success_timestamp(monkeypatch):
     session_clock(monkeypatch, "2026-11-19T10:00:00+09:00")
     for field in ("CLOUD_PROBE", "CLOUD_RESEARCH", "RECOVERY_SHA"):
