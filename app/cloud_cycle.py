@@ -18,6 +18,8 @@ from .api_client import APIError, TradingAPI
 from .config import Settings
 from .cloud_recovery import reconcile_orders
 from .dart import build_dart_service
+from .dart import DartClient
+from .intraday_disclosures import IntradayDisclosures
 from .engine import TradingEngine
 from .llm_analyst import LLMAnalyst
 from .news import build_news_service
@@ -40,7 +42,7 @@ class Checkpoint:
         self.session.headers["Authorization"] = "Bearer " + os.environ["GH_TOKEN"]
         path = "research-state.enc" if research else STATE_PATH
         self.url = f"https://api.github.com/repos/{REPOSITORY}/contents/{path}"
-        self.files = RESEARCH_FILES if research else ("trading.db", "cycle.json")
+        self.files = RESEARCH_FILES if research else ("trading.db", "cycle.json", "intraday.db")
         self.sha = None
 
     def restore(self, directory, *, optional=False, recovery_sha=None, allow_recovery=False):
@@ -221,10 +223,14 @@ def main():
         store = Store(settings.db_path, order_checkpoint=(
             None if probe else lambda: checkpoint.save(directory, "running")))
         try:
+            baseline_dart = ResearchSnapshot(research_rows, "dart", timedelta(hours=24))
+            live_dart = (IntradayDisclosures(baseline_dart, DartClient(
+                settings.dart_api_key, directory / "intraday.db", daily_budget=settings.dart_daily_budget))
+                if not probe and settings.dart_api_key else baseline_dart)
             rows = TradingEngine(
                 settings, api, LLMAnalyst("", settings.openai_model), store,
                 news=ResearchSnapshot(research_rows, "news", timedelta(hours=48)),
-                dart=ResearchSnapshot(research_rows, "dart", timedelta(hours=24)),
+                dart=live_dart,
             ).run_cycle(scan_only=probe)
             unresolved = store.unresolved_orders()
             if not probe:
@@ -262,8 +268,16 @@ def main():
                               "dart_changed": comparison.get("dart_changed_action"),
                               "gemini_status": gemini.get("status"), "gemini_verdict": gemini.get("verdict"),
                               "gemini_http_status": gemini.get("http_status"),
+                              "search_status": row.get("market_research", {}).get("status"),
+                              "search_http_status": row.get("market_research", {}).get("http_status"),
+                              "search_error_reasons": row.get("market_research", {}).get("error_reasons"),
+                              "search_sources": len(row.get("market_research", {}).get("sources", [])),
+                              "intraday_filings": len(row.get("dart", {}).get("intraday", {}).get("filings", [])),
                               "dart_checks": len(economic.get("dart_validation", {}).get("checks", []))}))
         print(json.dumps({"team": 5, "symbols": len(rows), "executions": counts}, ensure_ascii=True))
+        if probe and settings.gemini_api_key and not any(
+                row.get("market_research", {}).get("status") == "ok" for row in rows):
+            raise RuntimeError("Cloud probe obtained no grounded Gemini research; inspect search statuses")
         if unresolved:
             print("::warning::Order confirmation pending; the next cycle will reconcile server history", flush=True)
             raise SystemExit(75)

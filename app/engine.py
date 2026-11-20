@@ -6,6 +6,7 @@ from .api_client import APIError
 from .risk_manager import RiskManager
 from .economic_news import economic_indicators
 from .decision_policy import decide
+from .position_sizing import buy_order_size
 from .dart_analysis import validate_news
 from .policy_comparison import compare_case, policy_settings
 from .event_extraction import assertion_status
@@ -13,6 +14,10 @@ from .event_history import apply_history
 from .fundamental_analysis import apply_fundamentals
 from .news import load_aliases, parse_time
 from .gemini_review import GeminiReview
+from .event_outcomes import available_history, filing_outcomes
+from .research_universe import COMPANIES
+import json
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +28,12 @@ class TradingEngine:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.dart = dart
         self.risk = RiskManager(settings)
-        self.gemini = GeminiReview(getattr(settings, "gemini_api_key", ""), getattr(settings, "gemini_model", "gemini-3.1-flash-lite"))
+        self.gemini = GeminiReview(settings, store)
+        history_path = Path(__file__).parent.parent / "examples" / "filing_outcomes.json"
+        self.historical_events = json.loads(history_path.read_text(encoding="utf-8")) if history_path.exists() else {}
+        recorded = store.outcome_library()
+        if isinstance(recorded, dict):
+            self.historical_events.update(recorded)
 
     def run_cycle(self, scan_only=False):
         cutoff = self.clock()
@@ -37,11 +47,14 @@ class TradingEngine:
             return [{"action": "HOLD", "quantity": 0, "execution": "DATA_ERROR",
                      "reason": "초기 조회 실패; 주문 없음"}]
         aliases = {}
+        held_symbols = {row["symbol"] for row in portfolio.get("holdings", []) if row.get("quantity", 0) > 0}
+        symbols = sorted(symbols, key=lambda symbol: symbol not in held_symbols)
         for field in ("news_symbol_aliases", "gnews_symbol_aliases"):
             for symbol, names in load_aliases(getattr(self.s, field, "{}")).items():
                 aliases.setdefault(symbol, []).extend(names)
         results = []
-        reviews_remaining = 3
+        cycle_candles, cycle_filings = {}, {}
+        reviews_remaining = getattr(self.s, "gemini_reviews_per_cycle", 40)
         for symbol in symbols:
             try:
                 quote = prices.get(symbol, {})
@@ -52,6 +65,7 @@ class TradingEngine:
                 if any(parse_time(c["timestamp"]) > cutoff for c in candles):
                     raise ValueError("future candle")
                 tech = technical_signal(candles)
+                cycle_candles[symbol] = candles
                 if candles and max(parse_time(c["timestamp"]) for c in candles) < cutoff - timedelta(days=7):
                     tech = {"score": 0.0, "data_ready": False, "reason": "캔들 이력 지연"}
                 report = self.news.collect(symbol) if self.news else None
@@ -70,6 +84,7 @@ class TradingEngine:
                         dart_report = {"symbol": symbol, "status": "unavailable", "reason": "DART_SERVICE_ERROR"}
                 economics = validate_news(economics, dart_report, now=self.clock(),
                                           min_sources=getattr(self.s, "news_min_sources", 2))
+                cycle_filings[symbol] = (dart_report or {}).get("filings", [])
                 history_snapshot = None
                 if report and getattr(self.s, "event_history_enabled", True):
                     try:
@@ -106,29 +121,46 @@ class TradingEngine:
                 decision = decide(tech, llm, economics, self.s)
                 action = decision["action"]
                 holding = next((h for h in portfolio.get("holdings", []) if h["symbol"] == symbol), {})
+                research = {"status": "disabled"}
+                if getattr(self.s, "intraday_research_enabled", True) and self.gemini.key:
+                    try:
+                        research = self.gemini.search(symbol, aliases.get(symbol, [COMPANIES.get(symbol, symbol)]), self.clock())
+                    except Exception as exc:
+                        research = {"status": "research_error", "error_type": type(exc).__name__}
+                history = available_history(self.historical_events, symbol, self.clock())
                 quantity = 0
+                sizing = None
                 if action == "BUY":
-                    total = portfolio.get("totalAssetValue", 0)
-                    reserve = total * self.s.cash_reserve_pct
-                    cash = max(0, portfolio.get("availableCash", 0) - reserve)
-                    target = min(total * self.s.max_position_pct, (total - reserve) / len(symbols))
-                    room = max(0, target - holding.get("quantity", 0) * price)
-                    quantity = int(min(self.s.max_order_value_krw, cash / 1.00015, room) // price)
+                    sizing = buy_order_size(self.s, price, portfolio, holding, len(symbols))
+                    quantity = sizing["quantity"]
                 elif action == "SELL":
                     quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
                 gemini = {"status": "not_reviewed"}
-                if action == "BUY" and (quantity or scan_only) and reviews_remaining and self.gemini.key:
+                if (action == "BUY" and (quantity or scan_only) or holding.get("quantity", 0) > 0) and reviews_remaining and self.gemini.key:
                     reviews_remaining -= 1
-                    gemini = self.gemini.review(symbol, economics, dart_report, self.clock())
-                    if gemini.get("verdict") == "HOLD":
+                    try:
+                        gemini = self.gemini.review(symbol, economics, dart_report, self.clock(),
+                            technical=tech, proposed_action=action, holding=holding, research=research, history=history)
+                    except Exception as exc:
+                        gemini = {"status": "review_error", "error_type": type(exc).__name__}
+                if action == "BUY":
+                    confirmed = gemini.get("status") == "ok" and gemini.get("verdict") == "PASS"
+                    if ((getattr(self.s, "gemini_required_for_buy", True) and not confirmed)
+                            or gemini.get("verdict") in ("HOLD", "EXIT")):
                         action, quantity = "HOLD", 0
-                        decision = {**decision, "action": action, "reason": "Gemini 검토 보류: " + gemini["reason"]}
+                        decision = {**decision, "action": action, "reason": "Gemini 매수 확인 실패·보류: " + gemini.get("reason", gemini["status"])}
+                elif action == "HOLD" and gemini.get("status") == "ok" and gemini.get("verdict") == "EXIT":
+                    action = "SELL"
+                    quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
+                    decision = {**decision, "action": action, "reason": "당일 경제사건 매도 검토: " + gemini["reason"],
+                                "event_exit": True}
                 self.store.decision(symbol, tech, llm, action, decision["reason"])
                 item = {"symbol": symbol, "price": price, "action": action, "quantity": quantity,
                         "score": decision["score"], "reason": decision["reason"],
                         "technical_reason": tech.get("reason"),
                         "decision": decision, "economic_news": economics,
-                        "gemini_review": gemini,
+                        "gemini_review": gemini, "position_sizing": sizing,
+                        "market_research": research, "historical_event_outcomes": history,
                         "dart": dart_report or {"status": "disabled"},
                         "news": {"status": report.get("status") if report else "disabled",
                                  "count": len(report.get("articles", [])) if report else 0,
@@ -147,6 +179,27 @@ class TradingEngine:
                         # A research/export failure must not interrupt the trading policy.
                         item["policy_comparison"] = {"status": "unavailable"}
                 if not scan_only and quantity:
+                    # Grounded research can take time. Refresh the executable quote and size
+                    # instead of trading on the cycle's original 40-stock price snapshot.
+                    try:
+                        latest = self.api.prices([symbol])["result"]
+                        quote = next(q for q in latest if q["symbol"] == symbol)
+                        price = int(quote["price"])
+                        if price <= 0:
+                            raise ValueError("invalid refreshed price")
+                        if action == "BUY":
+                            sizing = buy_order_size(self.s, price, portfolio, holding, len(symbols))
+                            quantity = sizing["quantity"]
+                            item["position_sizing"] = sizing
+                        else:
+                            quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
+                        item.update(price=price, quantity=quantity)
+                    except Exception as exc:
+                        item["execution"] = "BLOCKED: 주문 직전 시세 재확인 실패"
+                        item["quote_error"] = type(exc).__name__
+                        self.store.policy_decision(symbol, item)
+                        results.append(item)
+                        continue
                     try:
                         quote_age = (self.clock() - parse_time(quote["timestamp"])).total_seconds()
                         quote_ok = 0 <= quote_age <= getattr(self.s, "max_price_age_seconds", 900)
@@ -190,8 +243,27 @@ class TradingEngine:
                     item["execution"] = "NO_ORDER"
                 self.store.policy_decision(symbol, item)
                 results.append(item)
+                if self.gemini.key and len(results) % 10 == 0:
+                    try:
+                        self.store.order_checkpoint()
+                    except Exception as exc:
+                        log.warning("조사 중간 저장 실패: %s", type(exc).__name__)
             except Exception as exc:
                 log.warning("종목 %s 분석 실패: %s", symbol, type(exc).__name__)
                 results.append({"symbol": symbol, "action": "HOLD", "quantity": 0,
                                 "execution": "DATA_ERROR", "reason": "종목 입력 오류; 주문 없음"})
+        if len(cycle_candles) == len(symbols) and all(cycle_candles.values()):
+            try:
+                updated = filing_outcomes(cycle_candles, cycle_filings, as_of=self.clock())
+                for symbol, report in updated.items():
+                    previous = available_history(self.historical_events, symbol, self.clock())
+                    cases = {case["receipt"]: case for case in previous.get("cases", [])}
+                    for case in report["cases"]:
+                        old = cases.get(case["receipt"], {})
+                        cases[case["receipt"]] = {**case, "horizons": {**old.get("horizons", {}), **case["horizons"]}}
+                    report["cases"] = sorted(cases.values(), key=lambda c: (c["date"], c["receipt"]), reverse=True)[:12]
+                self.store.save_outcomes(updated)
+                self.historical_events.update(updated)
+            except (ValueError, TypeError, KeyError, ZeroDivisionError) as exc:
+                log.warning("과거 공시 결과 갱신 실패: %s", type(exc).__name__)
         return results

@@ -154,7 +154,7 @@ def test_real_engine_connection_changes_decision_and_logs_without_order(tmp_path
     api.candles.return_value = {"candles": []}
     llm.assess.return_value = {"availability": "disabled"}
     news.collect.return_value = report(article("삼성전자 실적 개선"), article("삼성전자 공급계약 체결", "two.example"))
-    settings = SETTINGS.model_copy(update={"watchlist": "005930"})
+    settings = SETTINGS.model_copy(update={"watchlist": "005930", "gemini_required_for_buy": False})
     store = Store(str(tmp_path / "audit.db"))
     with patch("app.engine.technical_signal", return_value={"data_ready": True, "score": .3}):
         r = TradingEngine(settings, api, llm, store, news, clock=lambda: NOW).run_cycle(scan_only=True)[0]

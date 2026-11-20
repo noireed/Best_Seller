@@ -40,7 +40,7 @@ def decide(technical, llm, news, settings):
                 and not (result["llm_used"] and llm.get("news_context_used"))):
             adjustment = getattr(settings, "news_max_adjustment", .15) * score(news["score"])
             result["news_gate"] = "economic_adjustment_applied"
-        combined = max(-1, min(1, base + adjustment))
+        raw_adjustment = adjustment
         def action(value):
             # News never initiates an order contrary to the price trend.
             if value >= threshold and tech >= .2:
@@ -48,7 +48,13 @@ def decide(technical, llm, news, settings):
             if value <= -threshold and tech <= -.2:
                 return "SELL"
             return "HOLD"
-        baseline_action, final_action = action(base), action(combined)
+        baseline_action = action(base)
+        if getattr(settings, "protect_sell_signal", False) and baseline_action == "SELL" and adjustment > 0:
+            adjustment = 0.0
+            result["news_gate"] = "positive_news_sell_veto_blocked"
+        combined = max(-1, min(1, base + adjustment))
+        final_action = action(combined)
+        result["news_raw_adjustment"] = raw_adjustment
         result.update(action=final_action, baseline_action=baseline_action, baseline_score=base,
                       news_adjustment=adjustment, score=combined,
                       news_changed_action=baseline_action != final_action,

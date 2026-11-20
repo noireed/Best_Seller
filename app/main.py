@@ -6,13 +6,15 @@ from .storage import Store
 from .engine import TradingEngine
 from .news import build_news_service
 from .dart import build_dart_service
+from .intraday_disclosures import IntradayDisclosures
+from .research_universe import with_research_aliases
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--scan-only", action="store_true")
     args = parser.parse_args()
-    s = get_settings()
+    s = with_research_aliases(get_settings())
     logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO),
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     if not s.team_code or s.team_code == "PUT_YOUR_TEAM_CODE_HERE":
@@ -24,9 +26,14 @@ def main():
     print("로그인:", {k: login.get(k) for k in ("teamId", "teamName")})
     print("팀 확인:", api.me())
     news = build_news_service(s) if s.news_enabled else None
+    dart = build_dart_service(s)
+    if dart and s.intraday_research_enabled:
+        dart = IntradayDisclosures(dart, dart)
     engine = TradingEngine(s, api, LLMAnalyst(s.openai_api_key, s.openai_model), Store(s.db_path),
-                           news=news, dart=build_dart_service(s))
+                           news=news, dart=dart)
     while True:
+        if isinstance(dart, IntradayDisclosures):
+            dart.scan = None
         engine.run_cycle(scan_only=args.scan_only)
         if args.once: break
         time.sleep(max(60, s.loop_seconds))

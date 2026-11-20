@@ -10,6 +10,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_project: str = "best-seller-514603"
+    gemini_required_for_buy: bool = True
+    gemini_reviews_per_cycle: int = Field(default=40, ge=1, le=40)
+    gemini_daily_budget: int = Field(default=2000, ge=1, le=2000)
+    gemini_cache_seconds: int = Field(default=900, ge=60, le=3600)
+    intraday_research_enabled: bool = True
+    protect_sell_signal: bool = True
+    rebalance_band_pct: float = Field(default=0, ge=0, le=.5)
     openai_model: str = "gpt-4.1-mini"
     watchlist: str = "005930,000660,035420,035720,005380,000270,005490,051910,006400,373220,207940,068270,105560,055550,086790,012330,028260,009150,034020,003550,017670,030200,032830,000810,010130,010140,011200,011170,010950,096770,000100,128940,033780,090430,004020,006800,039490,071050,018260,021240"
     loop_seconds: int = 900

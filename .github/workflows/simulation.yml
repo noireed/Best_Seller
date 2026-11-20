@@ -38,6 +38,11 @@ concurrency:
   group: ${{ (inputs.session || (github.event_name == 'schedule' && github.event.schedule != '47 23 * * 0-4' && github.event.schedule != '3 3 * * 1-5')) && 'aqua-team-5-session' || format('aqua-run-{0}', github.run_id) }}
   cancel-in-progress: false
 
+env:
+  GEMINI_PROJECT: best-seller-514603
+  GEMINI_REQUIRED_FOR_BUY: 'true'
+  PROTECT_SELL_SIGNAL: 'true'
+
 permissions:
   contents: read
 

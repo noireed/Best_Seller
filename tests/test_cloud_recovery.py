@@ -89,7 +89,7 @@ def test_order_acknowledgement_survives_following_failures(tmp_path, error, exec
     states = []
     store = Store(str(tmp_path / "trading.db"))
     store.order_checkpoint = lambda: states.append(store.unresolved_orders())
-    settings = Settings(_env_file=None, watchlist="005930", dry_run=False, enable_trading=True)
+    settings = Settings(_env_file=None, gemini_required_for_buy=False, watchlist="005930", dry_run=False, enable_trading=True)
     api, llm = Mock(), Mock()
     api.portfolio.side_effect = [{"totalAssetValue": 100000000, "availableCash": 100000000,
                                  "holdings": []}, APIError("read failed", status=503)]

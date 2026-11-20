@@ -1,0 +1,140 @@
+{
+  "symbols": 40,
+  "start": "2023-01-05",
+  "end": "2026-11-19",
+  "training_end": "2025-08-04",
+  "validation_start": "2025-08-05",
+  "training_sessions": 629,
+  "validation_sessions": 315,
+  "training": {
+    "0": {
+      "return_pct": 2.782716,
+      "ending_equity_krw": 51391358,
+      "max_drawdown_pct": 13.581448,
+      "orders": 1230,
+      "buys": 686,
+      "sells": 544,
+      "topups": 131,
+      "cost_krw": 1301220
+    },
+    "0.05": {
+      "return_pct": 2.758222,
+      "ending_equity_krw": 51379111,
+      "max_drawdown_pct": 13.572842,
+      "orders": 1180,
+      "buys": 636,
+      "sells": 544,
+      "topups": 81,
+      "cost_krw": 1299978
+    },
+    "0.1": {
+      "return_pct": 2.641916,
+      "ending_equity_krw": 51320958,
+      "max_drawdown_pct": 13.482488,
+      "orders": 1131,
+      "buys": 587,
+      "sells": 544,
+      "topups": 32,
+      "cost_krw": 1294646
+    },
+    "0.2": {
+      "return_pct": 2.635292,
+      "ending_equity_krw": 51317646,
+      "max_drawdown_pct": 13.385662,
+      "orders": 1107,
+      "buys": 563,
+      "sells": 544,
+      "topups": 8,
+      "cost_krw": 1288954
+    }
+  },
+  "selected_on_training": 0,
+  "approved": false,
+  "applied_rebalance_band_pct": 0,
+  "validation": {
+    "baseline": {
+      "return_pct": 30.149922,
+      "ending_equity_krw": 65074961,
+      "max_drawdown_pct": 13.843846,
+      "orders": 674,
+      "buys": 371,
+      "sells": 303,
+      "topups": 71,
+      "cost_krw": 888865
+    },
+    "selected": {
+      "return_pct": 30.149922,
+      "ending_equity_krw": 65074961,
+      "max_drawdown_pct": 13.843846,
+      "orders": 674,
+      "buys": 371,
+      "sells": 303,
+      "topups": 71,
+      "cost_krw": 888865
+    }
+  },
+  "validation_slippage_5bps_per_side": {
+    "baseline": {
+      "return_pct": 27.034392,
+      "ending_equity_krw": 63517196,
+      "max_drawdown_pct": 13.568502,
+      "orders": 661,
+      "buys": 359,
+      "sells": 302,
+      "topups": 58,
+      "cost_krw": 872706
+    },
+    "selected": {
+      "return_pct": 27.034392,
+      "ending_equity_krw": 63517196,
+      "max_drawdown_pct": 13.568502,
+      "orders": 661,
+      "buys": 359,
+      "sells": 302,
+      "topups": 58,
+      "cost_krw": 872706
+    }
+  },
+  "full_period": {
+    "baseline": {
+      "return_pct": 33.058158,
+      "ending_equity_krw": 66529079,
+      "max_drawdown_pct": 14.061587,
+      "orders": 1897,
+      "buys": 1044,
+      "sells": 853,
+      "topups": 198,
+      "cost_krw": 2227972
+    },
+    "selected": {
+      "return_pct": 33.058158,
+      "ending_equity_krw": 66529079,
+      "max_drawdown_pct": 14.061587,
+      "orders": 1897,
+      "buys": 1044,
+      "sells": 853,
+      "topups": 198,
+      "cost_krw": 2227972
+    },
+    "buy_and_hold": {
+      "return_pct": 101.146658,
+      "ending_equity_krw": 100573329,
+      "max_drawdown_pct": 40.751288,
+      "orders": 39,
+      "buys": 39,
+      "sells": 0,
+      "topups": 0,
+      "cost_krw": 6100
+    }
+  },
+  "news_feature_cases": 0,
+  "limitations": [
+    "Daily previous-session signals and next-open fills; not a 15-minute execution replay",
+    "No historical Gemini opinions; fees and sale tax use the classroom model",
+    "News return effects are unmeasured when news_feature_cases is zero",
+    "Five-basis-point slippage is a stress assumption, not measured execution data",
+    "One chronological holdout on the current 40-stock universe; selection bias remains"
+  ],
+  "dataset_sha256": "0645ca17007b469b4784f1398abb4cee48164d2b8f0251b9bd885bb248335fc0",
+  "data_source": "Classroom simulation API /api/stocks/{symbol}/candles, 40 current symbols, up to 1000 daily bars each; collected 2026-11-20. Corporate-action adjustment not independently verified."
+}

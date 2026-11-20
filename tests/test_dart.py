@@ -295,7 +295,7 @@ def test_no_filings_is_not_a_transport_error(tmp_path):
 
 
 def test_dart_exception_preserves_engine_baseline_and_audit(tmp_path):
-    settings = Settings(_env_file=None, watchlist=SYMBOL)
+    settings = Settings(_env_file=None, gemini_required_for_buy=False, watchlist=SYMBOL)
     api, llm, dart_service = Mock(), Mock(), Mock()
     api.portfolio.return_value = {"availableCash": 100000000, "totalAssetValue": 100000000, "holdings": []}
     api.limits.return_value = {}

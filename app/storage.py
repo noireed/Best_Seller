@@ -14,8 +14,17 @@ class Store:
         self.db.execute("CREATE TABLE IF NOT EXISTS news_reports(id INTEGER PRIMARY KEY, at TEXT, symbol TEXT, status TEXT, report TEXT)")
         self.db.execute("CREATE TABLE IF NOT EXISTS policy_decisions(id INTEGER PRIMARY KEY, at TEXT, symbol TEXT, report TEXT)")
         self.db.execute("CREATE TABLE IF NOT EXISTS order_intents(id INTEGER PRIMARY KEY, at TEXT, symbol TEXT, state TEXT, report TEXT)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS company_event_outcomes(symbol TEXT PRIMARY KEY, report TEXT)")
         self.db.commit()
         self.event_history = EventHistory(self.db)
+
+    def outcome_library(self):
+        return {symbol: json.loads(report) for symbol, report in self.db.execute("SELECT symbol,report FROM company_event_outcomes")}
+
+    def save_outcomes(self, reports):
+        self.db.executemany("INSERT OR REPLACE INTO company_event_outcomes VALUES(?,?)",
+            [(symbol, json.dumps(report, ensure_ascii=False, allow_nan=False)) for symbol, report in reports.items()])
+        self.db.commit()
 
     def record_event_history(self, report, aliases, *, now, max_age_hours=48):
         self.event_history.ingest(report, aliases, now=now, max_age_hours=max_age_hours)

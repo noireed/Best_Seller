@@ -16,7 +16,7 @@ from .event_history import apply_history
 from .fundamental_analysis import apply_fundamentals
 
 POLICY_FIELDS = ("decision_threshold", "news_max_adjustment", "news_min_sources",
-                 "news_half_life_hours", "news_max_age_hours", "news_allow_delayed_in_strategy", "fundamental_guard_enabled")
+                 "news_half_life_hours", "news_max_age_hours", "news_allow_delayed_in_strategy", "fundamental_guard_enabled", "protect_sell_signal")
 
 
 def policy_settings(settings):
@@ -27,8 +27,10 @@ def policy_settings(settings):
 def compare_case(case, settings):
     snapshot = case.get("policy_settings", policy_settings(settings))
     # Older saved inputs predate the fundamental guard; keep that guard disabled for replay.
-    if isinstance(snapshot, dict) and set(snapshot) == set(POLICY_FIELDS)-{"fundamental_guard_enabled"}:
-        snapshot = {**snapshot, "fundamental_guard_enabled": False}
+    if isinstance(snapshot, dict):
+        for flag in ("fundamental_guard_enabled", "protect_sell_signal"):
+            if flag not in snapshot:
+                snapshot = {**snapshot, flag: False}
     if not isinstance(snapshot, dict) or set(snapshot) != set(POLICY_FIELDS):
         raise ValueError("invalid comparison policy settings")
     settings = Settings(_env_file=None, **snapshot)

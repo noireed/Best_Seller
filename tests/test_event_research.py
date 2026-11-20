@@ -208,7 +208,7 @@ def test_comparison_replays_recorded_threshold_instead_of_new_defaults():
 
 
 def test_comparison_failure_does_not_discard_primary_decision(tmp_path):
-    settings = Settings(_env_file=None, watchlist="005930")
+    settings = Settings(_env_file=None, gemini_required_for_buy=False, watchlist="005930")
     api, llm = Mock(), Mock()
     api.portfolio.return_value = {"availableCash": 100000000, "totalAssetValue": 100000000, "holdings": []}
     api.limits.return_value = {}
