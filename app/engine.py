@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from .indicators import technical_signal
+from .api_client import APIError
 from .risk_manager import RiskManager
 from .economic_news import economic_indicators
 from .decision_policy import decide
@@ -170,8 +171,11 @@ class TradingEngine:
                             self.store.order(symbol, action, quantity, price, item["execution"], order)
                             self.store.finish_order(identity, "RESPONDED", order)
                         except Exception as exc:
-                            item["execution"] = "UNKNOWN_ORDER_STATE"
-                            self.store.finish_order(identity, "UNKNOWN", {"error_type": type(exc).__name__})
+                            rejected = isinstance(exc, APIError) and exc.status in (400, 401, 403, 404, 409, 422, 429)
+                            item["execution"] = "REJECTED" if rejected else "UNKNOWN_ORDER_STATE"
+                            state = "RESPONDED" if rejected else "UNKNOWN"
+                            response = {"error_type": type(exc).__name__, "http_status": getattr(exc, "status", None)}
+                            self.store.finish_order(identity, state, response)
                             self.store.policy_decision(symbol, item)
                             results.append(item)
                             break

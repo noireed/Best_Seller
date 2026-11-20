@@ -81,7 +81,11 @@ def test_recovery_does_not_assign_one_server_order_twice(tmp_path):
     store.db.close()
 
 
-def test_confirmed_order_survives_following_portfolio_failure(tmp_path):
+@pytest.mark.parametrize("error, execution, unresolved", [
+    (None, "FILLED", 0), (400, "REJECTED", 0), (429, "REJECTED", 0),
+    (500, "UNKNOWN_ORDER_STATE", 1),
+])
+def test_order_acknowledgement_survives_following_failures(tmp_path, error, execution, unresolved):
     states = []
     store = Store(str(tmp_path / "trading.db"))
     store.order_checkpoint = lambda: states.append(store.unresolved_orders())
@@ -94,12 +98,14 @@ def test_confirmed_order_survives_following_portfolio_failure(tmp_path):
                                           "timestamp": NOW.isoformat()}]}
     api.candles.return_value = {"candles": []}
     api.place_order.return_value = {"orderId": 42, "status": "FILLED"}
+    if error:
+        api.place_order.side_effect = APIError("order error", status=error)
     llm.assess.return_value = {"availability": "disabled"}
     with patch("app.engine.technical_signal", return_value={"score": 1, "data_ready": True}):
         rows = TradingEngine(settings, api, llm, store, clock=lambda: NOW).run_cycle()
-    assert rows[0]["execution"] == "FILLED"
-    assert store.unresolved_orders() == 0
-    assert states == [1, 0]
+    assert rows[0]["execution"] == execution
+    assert store.unresolved_orders() == unresolved
+    assert states == [1, unresolved]
     api.place_order.assert_called_once()
     store.db.close()
 
