@@ -169,10 +169,16 @@ class TradingEngine:
                             item["execution"] = order["status"]
                             self.store.order(symbol, action, quantity, price, item["execution"], order)
                             self.store.finish_order(identity, "RESPONDED", order)
-                            portfolio, limits = self.api.portfolio(), self.api.limits()
                         except Exception as exc:
                             item["execution"] = "UNKNOWN_ORDER_STATE"
                             self.store.finish_order(identity, "UNKNOWN", {"error_type": type(exc).__name__})
+                            self.store.policy_decision(symbol, item)
+                            results.append(item)
+                            break
+                        try:
+                            portfolio, limits = self.api.portfolio(), self.api.limits()
+                        except Exception as exc:
+                            log.warning("주문 응답 후 계좌 조회 실패: %s", type(exc).__name__)
                             self.store.policy_decision(symbol, item)
                             results.append(item)
                             break

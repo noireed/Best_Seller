@@ -1,4 +1,5 @@
 name: AQuA simulation
+run-name: "AQuA ${{ inputs.session && 'continuous session' || github.event_name == 'schedule' && 'scheduled run' || 'manual check' }}"
 on:
   push:
     branches: [fix/cloud-research]

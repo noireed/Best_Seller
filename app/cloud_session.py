@@ -3,6 +3,8 @@
 from datetime import datetime, time, timedelta
 import json
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import subprocess
 import sys
 import time as timer
@@ -10,7 +12,8 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from .cloud_cycle import REPOSITORY
+from .cloud_cycle import Checkpoint, REPOSITORY
+from .news import parse_time
 
 KST = ZoneInfo("Asia/Seoul")
 SESSION_SECONDS = 330 * 60
@@ -46,6 +49,22 @@ def next_market_open(now):
     return candidate
 
 
+def record_standby(now, opening):
+    with TemporaryDirectory() as temp:
+        directory = Path(temp)
+        checkpoint = Checkpoint()
+        status = checkpoint.restore(directory, allow_recovery=True)
+        path = directory / "cycle.json"
+        metadata = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        since = metadata.get("standby_since")
+        verified = metadata.get("overnight_verified_at")
+        if not since or (verified and parse_time(verified) >= parse_time(since)):
+            metadata["standby_since"] = now.isoformat()
+        metadata["next_open_at"] = opening.isoformat()
+        path.write_text(json.dumps(metadata), encoding="utf-8")
+        checkpoint.save(directory, status, message="AQuA standby until " + opening.isoformat())
+
+
 def run_session(duration_seconds=None):
     deadline = timer.monotonic() + (SESSION_SECONDS if duration_seconds is None else duration_seconds)
     next_cycle = None
@@ -58,6 +77,12 @@ def run_session(duration_seconds=None):
         if now.weekday() >= 5 or not time(9) <= now.time() < time(15):
             opening = next_market_open(now)
             if waiting_until != opening:
+                try:
+                    record_standby(now, opening)
+                except requests.RequestException:
+                    print(json.dumps({"status": "standby_checkpoint_retry"}), flush=True)
+                    timer.sleep(60)
+                    continue
                 print(json.dumps({"status": "waiting_for_open", "at": now.isoformat(),
                                   "next_open_at": opening.isoformat()}), flush=True)
                 waiting_until = opening
@@ -73,12 +98,12 @@ def run_session(duration_seconds=None):
         try:
             subprocess.run([sys.executable, "-u", "-m", "app.cloud_cycle"],
                            check=True, timeout=600)
-        except subprocess.CalledProcessError as exc:
-            if exc.returncode != 75:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            if isinstance(exc, subprocess.CalledProcessError) and exc.returncode == 78:
                 raise
             next_cycle = datetime.now(KST) + timedelta(seconds=60)
-            print(json.dumps({"status": "cycle_retry", "next_cycle_at": next_cycle.isoformat()}),
-                  flush=True)
+            print(json.dumps({"status": "cycle_retry", "error_type": type(exc).__name__,
+                              "next_cycle_at": next_cycle.isoformat()}), flush=True)
             continue
         next_cycle = now + timedelta(seconds=CYCLE_SECONDS)
         finished = datetime.now(KST)

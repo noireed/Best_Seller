@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo
 from .event_history import EventHistory
 
 class Store:
-    def __init__(self, path):
+    def __init__(self, path, *, order_checkpoint=None):
+        self.order_checkpoint = order_checkpoint or (lambda: None)
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.execute("CREATE TABLE IF NOT EXISTS decisions(id INTEGER PRIMARY KEY, at TEXT, symbol TEXT, technical TEXT, llm TEXT, action TEXT, reason TEXT)")
@@ -48,14 +49,26 @@ class Store:
             (datetime.now(ZoneInfo("Asia/Seoul")).isoformat(), symbol, "SUBMITTING",
              json.dumps(report, ensure_ascii=False, allow_nan=False)))
         self.db.commit()
+        try:
+            self.order_checkpoint()
+        except Exception:
+            # No submission has started when the pre-order checkpoint fails.
+            self.db.execute("UPDATE order_intents SET state='RESPONDED',report=? WHERE id=?",
+                            (json.dumps({"not_submitted": True}), row.lastrowid))
+            self.db.commit()
+            raise
         return row.lastrowid
 
     def finish_order(self, identity, state, report):
         if state not in ("RESPONDED", "UNKNOWN"):
             raise ValueError("invalid submission state")
+        if state == "UNKNOWN":
+            current = self.db.execute("SELECT report FROM order_intents WHERE id=?", (identity,)).fetchone()
+            report = {**json.loads(current[0]), "last_error": report}
         self.db.execute("UPDATE order_intents SET state=?,report=? WHERE id=?",
                         (state, json.dumps(report, ensure_ascii=False, allow_nan=False), identity))
         self.db.commit()
+        self.order_checkpoint()
 
     def order(self, symbol, side, quantity, price, status, response):
         self.db.execute("INSERT INTO orders(at,symbol,side,quantity,price,status,response) VALUES(?,?,?,?,?,?,?)",

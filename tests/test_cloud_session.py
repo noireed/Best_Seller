@@ -25,6 +25,7 @@ def session_clock(monkeypatch, value):
 
     monkeypatch.setattr(cloud_session, "datetime", Clock)
     monkeypatch.setattr(cloud_session, "handoff", Mock())
+    monkeypatch.setattr(cloud_session, "record_standby", Mock())
     monkeypatch.setattr(cloud_cycle, "datetime", Clock)
     monkeypatch.setattr(cloud_session.timer, "sleep", advance)
     monkeypatch.setattr(cloud_session.timer, "monotonic", lambda: clock.elapsed)
@@ -135,7 +136,7 @@ def test_successive_sessions_resume_on_monday_without_cron(monkeypatch):
     assert cloud_session.handoff.call_count >= 10
 
 
-@pytest.mark.parametrize("failure", [subprocess.CalledProcessError(1, "cycle"), subprocess.TimeoutExpired("cycle", 600)])
+@pytest.mark.parametrize("failure", [subprocess.CalledProcessError(78, "cycle")])
 def test_failed_cycle_stops_before_repeating_orders(monkeypatch, failure):
     session_clock(monkeypatch, "2026-11-19T10:00:00+09:00")
     cycle = Mock(side_effect=failure)
@@ -145,14 +146,16 @@ def test_failed_cycle_stops_before_repeating_orders(monkeypatch, failure):
     cycle.assert_called_once()
 
 
-def test_data_failure_retries_after_one_minute(monkeypatch, capsys):
+@pytest.mark.parametrize("failure", [subprocess.CalledProcessError(75, "cycle"),
+    subprocess.CalledProcessError(1, "cycle"), subprocess.TimeoutExpired("cycle", 600)])
+def test_data_failure_retries_after_one_minute(monkeypatch, capsys, failure):
     clock = session_clock(monkeypatch, "2026-11-19T10:00:00+09:00")
     starts = []
 
     def cycle(*args, **kwargs):
         starts.append(clock.value)
         if len(starts) == 1:
-            raise subprocess.CalledProcessError(75, "cycle")
+            raise failure
         clock.value = clock.value.replace(hour=15)
 
     monkeypatch.setattr(cloud_session.subprocess, "run", cycle)
@@ -166,11 +169,14 @@ def test_data_failure_preserves_ready_checkpoint_without_success_timestamp(monke
     for field in ("CLOUD_PROBE", "CLOUD_RESEARCH", "RECOVERY_SHA"):
         monkeypatch.delenv(field, raising=False)
     checkpoint = Mock()
+    checkpoint.restore.return_value = "ready"
     saved = []
 
-    def save(directory, status):
+    def save(directory, status, **kwargs):
         saved.append(status)
-        assert not (directory / "cycle.json").exists()
+        metadata = json.loads((directory / "cycle.json").read_text())
+        assert "started_at" not in metadata
+        assert metadata["durable_orders"]
 
     checkpoint.save.side_effect = save
     monkeypatch.setattr(cloud_cycle, "Checkpoint", Mock(return_value=checkpoint))
@@ -212,12 +218,17 @@ def test_recent_checkpoint_prevents_duplicate_cycle(monkeypatch, age):
     for field in ("CLOUD_PROBE", "CLOUD_RESEARCH", "RECOVERY_SHA"):
         monkeypatch.delenv(field, raising=False)
     checkpoint = Mock()
+    checkpoint.restore.return_value = "ready"
 
-    def restore(directory):
+    def restore(directory, **kwargs):
         previous = clock.value - timedelta(seconds=age)
         (directory / "cycle.json").write_text(json.dumps({"started_at": previous.isoformat()}))
 
-    checkpoint.restore.side_effect = restore
+    def restore_ready(directory, **kwargs):
+        restore(directory, **kwargs)
+        return "ready"
+
+    checkpoint.restore.side_effect = restore_ready
     monkeypatch.setattr(cloud_cycle, "Checkpoint", Mock(return_value=checkpoint))
     api = Mock()
     api.login.return_value = {"teamId": 5}
