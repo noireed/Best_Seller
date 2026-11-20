@@ -18,35 +18,53 @@ CYCLE_SECONDS = 900
 
 
 def handoff():
-    response = requests.post(
-        f"https://api.github.com/repos/{REPOSITORY}/actions/workflows/simulation.yml/dispatches",
-        headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
-                 "Accept": "application/vnd.github+json"},
-        json={"ref": "main", "inputs": {"trade": True, "session": True}},
-        timeout=20,
-    )
-    response.raise_for_status()
-    print(json.dumps({"status": "handoff_requested"}), flush=True)
+    for delay in (0, 5, 15, 30):
+        if delay:
+            timer.sleep(delay)
+        try:
+            response = requests.post(
+                f"https://api.github.com/repos/{REPOSITORY}/actions/workflows/simulation.yml/dispatches",
+                headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                         "Accept": "application/vnd.github+json"},
+                json={"ref": "main", "inputs": {"trade": True, "session": True}},
+                timeout=20,
+            )
+            response.raise_for_status()
+            print(json.dumps({"status": "handoff_requested"}), flush=True)
+            return
+        except requests.RequestException:
+            print(json.dumps({"status": "handoff_retry"}), flush=True)
+    raise RuntimeError("Cloud session handoff failed after four attempts")
 
 
-def run_session():
-    deadline = timer.monotonic() + SESSION_SECONDS
+def next_market_open(now):
+    candidate = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    if now >= candidate:
+        candidate += timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate += timedelta(days=1)
+    return candidate
+
+
+def run_session(duration_seconds=None):
+    deadline = timer.monotonic() + (SESSION_SECONDS if duration_seconds is None else duration_seconds)
     next_cycle = None
-    waiting = False
+    waiting_until = None
     while True:
         now = datetime.now(KST)
-        if now.weekday() >= 5 or now.time() >= time(15):
-            print(json.dumps({"status": "market_closed", "at": now.isoformat()}), flush=True)
-            return
         if timer.monotonic() >= deadline - 600:
             handoff()
             return
-        if now.time() < time(9):
-            if not waiting:
-                print(json.dumps({"status": "waiting_for_open", "at": now.isoformat()}), flush=True)
-                waiting = True
-            timer.sleep(30)
+        if now.weekday() >= 5 or not time(9) <= now.time() < time(15):
+            opening = next_market_open(now)
+            if waiting_until != opening:
+                print(json.dumps({"status": "waiting_for_open", "at": now.isoformat(),
+                                  "next_open_at": opening.isoformat()}), flush=True)
+                waiting_until = opening
+            next_cycle = None
+            timer.sleep(min(30, (opening - now).total_seconds()))
             continue
+        waiting_until = None
         if next_cycle is not None and now < next_cycle:
             timer.sleep(min(30, (next_cycle - now).total_seconds()))
             continue
@@ -72,7 +90,10 @@ def run_session():
 
 if __name__ == "__main__":
     if os.environ.get("CLOUD_SESSION") == "true":
-        run_session()
+        minutes = int(os.environ.get("CLOUD_SESSION_MINUTES", "330"))
+        if not 11 <= minutes <= 330:
+            raise ValueError("Session duration must be between 11 and 330 minutes")
+        run_session(duration_seconds=minutes * 60)
     else:
         from .cloud_cycle import main
         main()

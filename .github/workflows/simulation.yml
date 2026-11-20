@@ -19,8 +19,12 @@ on:
         description: Refresh company news and disclosures
         type: boolean
         default: false
+      session_minutes:
+        description: Runner session length (11-330 minutes); successor uses 330
+        type: number
+        default: 330
       session:
-        description: Keep checking every 15 minutes until market close
+        description: Maintain cloud standby and check every 15 minutes during market hours
         type: boolean
         default: false
       trade:
@@ -74,6 +78,7 @@ jobs:
       - run: python -u -m app.cloud_session
         env:
           CLOUD_SESSION: ${{ !inputs.recovery_sha && (github.event_name == 'schedule' || inputs.session) }}
+          CLOUD_SESSION_MINUTES: ${{ inputs.session_minutes || 330 }}
           TEAM_CODE: ${{ secrets.AQUA_TEAM_CODE }}
           GNEWS_API_KEY: ${{ secrets.AQUA_GNEWS_API_KEY }}
           DART_API_KEY: ${{ secrets.AQUA_DART_API_KEY }}

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import pytest
+import requests
 
 from app import cloud_cycle, cloud_session
 from app.api_client import APIError
@@ -23,6 +24,7 @@ def session_clock(monkeypatch, value):
         clock.elapsed += seconds
 
     monkeypatch.setattr(cloud_session, "datetime", Clock)
+    monkeypatch.setattr(cloud_session, "handoff", Mock())
     monkeypatch.setattr(cloud_cycle, "datetime", Clock)
     monkeypatch.setattr(cloud_session.timer, "sleep", advance)
     monkeypatch.setattr(cloud_session.timer, "monotonic", lambda: clock.elapsed)
@@ -45,18 +47,19 @@ def test_waits_for_open_and_repeats_without_cron(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize("value", ["2026-11-19T15:00:00+09:00", "2026-11-21T09:00:00+09:00"])
-def test_closed_market_never_orders_or_hands_off(monkeypatch, value):
+def test_closed_market_waits_and_hands_off_without_orders(monkeypatch, value):
     session_clock(monkeypatch, value)
     cycle, handoff = Mock(), Mock()
     monkeypatch.setattr(cloud_session.subprocess, "run", cycle)
     monkeypatch.setattr(cloud_session, "handoff", handoff)
     cloud_session.run_session()
     cycle.assert_not_called()
-    handoff.assert_not_called()
+    handoff.assert_called_once()
 
 
 def test_late_start_runs_immediately_and_closes_at_three(monkeypatch):
     clock = session_clock(monkeypatch, "2026-11-19T05:59:30+00:00")
+    monkeypatch.setattr(cloud_session, "SESSION_SECONDS", 660)
     cycle = Mock()
     monkeypatch.setattr(cloud_session.subprocess, "run", cycle)
     cloud_session.run_session()
@@ -83,6 +86,53 @@ def test_handoff_uses_workflow_token_and_serial_trade_job(monkeypatch):
     args = post.call_args.kwargs
     assert args["json"] == {"ref": "main", "inputs": {"trade": True, "session": True}}
     post.return_value.raise_for_status.assert_called_once()
+
+
+def test_handoff_retries_network_failure(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "test-token")
+    post = Mock(side_effect=[requests.Timeout(), Mock()])
+    sleep = Mock()
+    monkeypatch.setattr(cloud_session.requests, "post", post)
+    monkeypatch.setattr(cloud_session.timer, "sleep", sleep)
+    cloud_session.handoff()
+    assert post.call_count == 2
+    sleep.assert_called_once_with(5)
+
+
+def test_handoff_reports_exhausted_retries(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "test-token")
+    post = Mock(side_effect=requests.Timeout())
+    monkeypatch.setattr(cloud_session.requests, "post", post)
+    monkeypatch.setattr(cloud_session.timer, "sleep", Mock())
+    with pytest.raises(RuntimeError, match="four attempts"):
+        cloud_session.handoff()
+    assert post.call_count == 4
+
+
+@pytest.mark.parametrize("value, opening", [
+    ("2026-11-20T08:00:00+09:00", "2026-11-20T09:00:00+09:00"),
+    ("2026-11-20T15:00:00+09:00", "2026-11-23T09:00:00+09:00"),
+    ("2026-11-21T08:00:00+09:00", "2026-11-23T09:00:00+09:00"),
+    ("2026-11-22T23:59:00+09:00", "2026-11-23T09:00:00+09:00"),
+])
+def test_next_open_skips_night_and_weekend(value, opening):
+    assert cloud_session.next_market_open(datetime.fromisoformat(value)) == datetime.fromisoformat(opening)
+
+
+def test_successive_sessions_resume_on_monday_without_cron(monkeypatch):
+    clock = session_clock(monkeypatch, "2026-11-20T15:00:00+09:00")
+    opened = []
+
+    def cycle(*args, **kwargs):
+        opened.append(clock.value)
+        raise StopIteration("market opened")
+
+    monkeypatch.setattr(cloud_session.subprocess, "run", cycle)
+    with pytest.raises(StopIteration, match="market opened"):
+        for _ in range(15):
+            cloud_session.run_session()
+    assert opened == [datetime.fromisoformat("2026-11-23T09:00:00+09:00")]
+    assert cloud_session.handoff.call_count >= 10
 
 
 @pytest.mark.parametrize("failure", [subprocess.CalledProcessError(1, "cycle"), subprocess.TimeoutExpired("cycle", 600)])
