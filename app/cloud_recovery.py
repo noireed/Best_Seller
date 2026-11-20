@@ -14,7 +14,7 @@ def reconcile_orders(store, api):
         return True
     first = api.orders(page=0, size=100)
     pages = first.get("totalPages")
-    if type(pages) is not int or not 1 <= pages <= 100:
+    if type(pages) is not int or pages < 1:
         return False
     orders = list(first["orders"])
     for page in range(1, pages):
@@ -30,6 +30,8 @@ def reconcile_orders(store, api):
         identity = json.loads(raw).get("orderId")
         if identity is not None:
             used.add(str(identity))
+    recorded = {str(json.loads(raw).get("orderId"))
+                for (raw,) in store.db.execute("SELECT response FROM orders")}
     for identity, at, symbol, raw in pending:
         request = json.loads(raw)
         started = parse_time(at)
@@ -49,5 +51,9 @@ def reconcile_orders(store, api):
         if str(order["orderId"]) in used or order.get("status") not in ("FILLED", "CANCELLED"):
             continue
         used.add(str(order["orderId"]))
+        if str(order["orderId"]) not in recorded:
+            price = order.get("executedPrice") or order.get("price") or request.get("price") or 0
+            store.order(symbol, order["side"], order["quantity"], price, order["status"], order)
+            recorded.add(str(order["orderId"]))
         store.finish_order(identity, "RESPONDED", order)
     return store.unresolved_orders() == 0

@@ -79,6 +79,18 @@ def test_session_hands_off_before_runner_limit(monkeypatch):
     cycle.assert_not_called()
 
 
+def test_reserved_successor_is_released_without_another_dispatch(monkeypatch, capsys):
+    session_clock(monkeypatch, "2026-11-19T08:59:00+09:00")
+    monkeypatch.setenv("CLOUD_CONTINUATION_RESERVED", "true")
+    monkeypatch.setattr(cloud_session, "SESSION_SECONDS", 630)
+    cycle = Mock()
+    monkeypatch.setattr(cloud_session.subprocess, "run", cycle)
+    cloud_session.run_session()
+    cloud_session.handoff.assert_not_called()
+    cycle.assert_not_called()
+    assert "handoff_ready" in capsys.readouterr().out
+
+
 def test_handoff_uses_workflow_token_and_serial_trade_job(monkeypatch):
     monkeypatch.setenv("GH_TOKEN", "test-token")
     post = Mock()

@@ -72,7 +72,10 @@ def run_session(duration_seconds=None):
     while True:
         now = datetime.now(KST)
         if timer.monotonic() >= deadline - 600:
-            handoff()
+            if os.environ.get("CLOUD_CONTINUATION_RESERVED") == "true":
+                print(json.dumps({"status": "handoff_ready"}), flush=True)
+            else:
+                handoff()
             return
         if now.weekday() >= 5 or not time(9) <= now.time() < time(15):
             opening = next_market_open(now)

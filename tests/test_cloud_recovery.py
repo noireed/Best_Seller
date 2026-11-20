@@ -1,12 +1,14 @@
 from datetime import datetime
 import json
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+from urllib.error import URLError
 
 import pytest
 
 from app.api_client import APIError
 from app.cloud_recovery import reconcile_orders
 from app import cloud_watchdog, cloud_cycle, cloud_session
+from app import cloud_continuation
 from app.config import Settings
 from app.engine import TradingEngine
 from app.storage import Store
@@ -37,6 +39,7 @@ def test_unknown_intent_keeps_request_and_reconciles_without_resubmission(tmp_pa
     assert reconcile_orders(store, api)
     assert store.unresolved_orders() == 0
     assert reconcile_orders(store, api)
+    assert store.db.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
     api.place_order.assert_not_called()
     api.orders.assert_called_once()
     store.db.close()
@@ -189,3 +192,32 @@ def test_standby_preserves_weekend_start_across_successive_runners(monkeypatch):
     cloud_session.record_standby(datetime.fromisoformat("2026-11-23T15:00:00+09:00"),
                                  datetime.fromisoformat("2026-11-24T09:00:00+09:00"))
     assert metadata["standby_since"] == "2026-11-23T15:00:00+09:00"
+
+
+def test_successor_is_reserved_without_application_dependencies(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "noireed/Best_Seller")
+    response = MagicMock()
+    response.status = 204
+    response.__enter__.return_value = response
+    send = Mock(return_value=response)
+    monkeypatch.setattr(cloud_continuation, "urlopen", send)
+    cloud_continuation.reserve_successor()
+    request = send.call_args.args[0]
+    assert request.full_url.endswith("/repos/noireed/Best_Seller/actions/workflows/simulation.yml/dispatches")
+    assert json.loads(request.data) == {"ref": "main", "inputs": {"trade": True, "session": True}}
+
+
+def test_successor_reservation_retries_transport_errors(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "noireed/Best_Seller")
+    response = MagicMock()
+    response.status = 204
+    response.__enter__.return_value = response
+    send = Mock(side_effect=[URLError("offline"), response])
+    sleep = Mock()
+    monkeypatch.setattr(cloud_continuation, "urlopen", send)
+    monkeypatch.setattr(cloud_continuation.time, "sleep", sleep)
+    cloud_continuation.reserve_successor()
+    assert send.call_count == 2
+    sleep.assert_called_once_with(15)

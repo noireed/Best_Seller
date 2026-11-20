@@ -33,6 +33,11 @@ on:
         type: boolean
         default: false
 
+# Continuous runs retain a queued successor independently of the order lock.
+concurrency:
+  group: ${{ (inputs.session || (github.event_name == 'schedule' && github.event.schedule != '47 23 * * 0-4' && github.event.schedule != '3 3 * * 1-5')) && 'aqua-team-5-session' || format('aqua-run-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -72,6 +77,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Reserve continuous successor
+        if: ${{ !inputs.recovery_sha && (github.event_name == 'schedule' || inputs.session) }}
+        run: python3 -m app.cloud_continuation
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -79,6 +89,7 @@ jobs:
       - run: python -u -m app.cloud_session
         env:
           CLOUD_SESSION: ${{ !inputs.recovery_sha && (github.event_name == 'schedule' || inputs.session) }}
+          CLOUD_CONTINUATION_RESERVED: ${{ !inputs.recovery_sha && (github.event_name == 'schedule' || inputs.session) }}
           CLOUD_SESSION_MINUTES: ${{ inputs.session_minutes || 330 }}
           TEAM_CODE: ${{ secrets.AQUA_TEAM_CODE }}
           GNEWS_API_KEY: ${{ secrets.AQUA_GNEWS_API_KEY }}
