@@ -1,6 +1,9 @@
 # 개발 담당: 최준혁
 """Grounded discovery and explicit, cited second opinions for simulated orders."""
 import json
+import html
+import re
+import unicodedata
 from datetime import date, datetime
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -12,6 +15,17 @@ from .research_universe import COMPANIES
 from .event_extraction import extract_events
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+def quote_text(text):
+    """Normalize presentation only; preserve words, numbers, signs and negation."""
+    text = html.unescape(unicodedata.normalize("NFC", text))
+    for _ in range(3):
+        updated = re.sub(r"(?<!\w)(\*\*|__|\*|_)(\S(?:.*?\S)?)\1(?!\w)", r"\2", text)
+        if updated == text:
+            break
+        text = updated
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def source_group(domain):
@@ -119,22 +133,31 @@ class GeminiReview:
             result = json.loads(raw["text"])
             claim_index = result["claim_id"]
             if type(claim_index) is not int or not 0 <= claim_index < len(research.get("claims", [])):
-                raise ValueError("invalid claim")
+                raise ValueError("invalid_claim_id")
             claim = research["claims"][claim_index]
             ids = claim["source_ids"]
             quote = result["evidence_quote"]
             verdict = result["verdict"]
             if (result["symbol"] != symbol or verdict not in ("PASS", "HOLD", "EXIT")
                     or not isinstance(ids, list) or not ids or any(type(i) is not int or not 0 <= i < len(sources) for i in ids)
-                    or not isinstance(quote, str) or not quote.strip() or quote not in research["text"]
+                    or not isinstance(quote, str) or not quote.strip()
                     or not isinstance(result["reason"], str) or not result["reason"].strip()
                     or not isinstance(result["counter_case"], str) or not result["counter_case"].strip()
                     or not isinstance(result["missing_inputs"], list)):
-                raise ValueError("invalid evidence")
-            if not len(quote.strip()) >= 20 or quote not in claim["text"]:
-                return {"status": "unsupported_citation", "verdict": "HOLD"}
+                raise ValueError("invalid_schema_or_evidence")
+            if quote_text(quote) not in quote_text(research["text"]):
+                raise ValueError("quote_summary_mismatch")
+            if len(quote_text(quote)) < 20 or quote_text(quote) not in quote_text(claim["text"]):
+                return {"status": "unsupported_citation", "verdict": "HOLD", "validation_error": "quote_claim_mismatch"}
+            normalized = quote not in research["text"] or quote not in claim["text"]
+            if normalized:
+                # Persist an actual source quote rather than presenting model-normalized
+                # wording as verbatim. The provider's claim-to-source binding is unchanged.
+                result["model_evidence_quote"] = quote
+                quote = result["evidence_quote"] = claim["text"]
+            result["quote_format_normalized"] = normalized
             if result["event_date"] and date.fromisoformat(result["event_date"]) > now.astimezone(KST).date():
-                raise ValueError("future event presented as observed fact")
+                raise ValueError("future_event_date")
             if proposed_action == "SELL" and verdict != "PASS":
                 # Preserve a mandatory price exit; the model's disagreement is only logged.
                 verdict = "PASS"
@@ -152,5 +175,9 @@ class GeminiReview:
                     return {"status": "exit_not_corroborated", "verdict": "HOLD", "reason": result["reason"]}
             return {"status": "ok", **result, "verdict": verdict, "evidence_ids": ids, "sources": [sources[i] for i in sorted(set(ids))],
                     "observed_at": raw["observed_at"], "usage": raw.get("usage"), "cached": raw.get("cached", False)}
-        except (ValueError, TypeError, KeyError, IndexError):
-            return {"status": "invalid_response"}
+        except json.JSONDecodeError:
+            return {"status": "invalid_response", "validation_error": "malformed_json", "finish_reason": raw.get("finish_reason")}
+        except (ValueError, TypeError, KeyError, IndexError) as exc:
+            known = {"invalid_claim_id", "invalid_schema_or_evidence", "quote_summary_mismatch", "future_event_date"}
+            error = str(exc) if isinstance(exc, ValueError) and str(exc) in known else "invalid_schema_or_date"
+            return {"status": "invalid_response", "validation_error": error}

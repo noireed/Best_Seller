@@ -215,3 +215,55 @@ def test_reservation_failure_cannot_make_a_billable_call(tmp_path):
     session.post.assert_not_called()
     assert client.reserved == 0
     store.db.close()
+
+
+def test_celltrion_italic_quote_is_valid_without_changing_source_binding(reviewer):
+    r=research()
+    original="Revision: news reports highlighted that Celltrion has significantly modified its clinical development strategy for the biosimilar version of the cancer drug *Darzalex* (CT-P44)"
+    submitted="news reports highlighted that Celltrion has significantly modified its clinical development strategy for the biosimilar version of the cancer drug Darzalex (CT-P44)"
+    r["text"]=r["claims"][0]["text"]=original
+    result=review(reviewer,answer(verdict="HOLD",evidence_quote=submitted),r=r)
+    assert result["status"] == "ok" and result["verdict"] == "HOLD"
+    assert result["quote_format_normalized"]
+    assert result["evidence_quote"] == original
+    assert result["model_evidence_quote"] == submitted
+    assert result["evidence_ids"] == [0,1]
+
+
+@pytest.mark.parametrize("submitted", [
+    "Samsung Electronics profit declined 50% and production was halted.",
+    "Samsung Electronics profit rose 30% and production was halted.",
+    "Samsung Electronics profit declined 30% and production was not halted.",
+])
+def test_quote_normalization_never_accepts_changed_numbers_direction_or_negation(reviewer,submitted):
+    r=research();r["text"]=r["claims"][0]["text"]="**Samsung Electronics** profit declined **30%** and production was halted."
+    result=review(reviewer,answer(evidence_quote=submitted),r=r)
+    assert result["status"] == "invalid_response" and result["validation_error"] == "quote_summary_mismatch"
+
+
+def test_zero_share_buy_is_recorded_as_hold_with_sizing_reason(tmp_path):
+    s=Settings(_env_file=None,watchlist="005930",gemini_api_key="test",max_position_pct=.01)
+    api=Mock();llm=Mock();store=Store(str(tmp_path/"db"))
+    api.portfolio.return_value={"totalAssetValue":100000000,"availableCash":90000000,"holdings":[{"symbol":"005930","quantity":20,"availableQuantity":20}]}
+    api.limits.return_value={"remainingTrades":30,"cooldowns":[]}
+    api.prices.return_value={"result":[{"symbol":"005930","price":70000,"timestamp":NOW.isoformat()}]}
+    api.candles.return_value={"candles":[]};llm.assess.return_value={"availability":"disabled"}
+    e=TradingEngine(s,api,llm,store,clock=lambda:NOW)
+    e.gemini.search=Mock(return_value=research());e.gemini.review=Mock(return_value={"status":"ok","verdict":"PASS"})
+    with patch("app.engine.technical_signal",return_value={"data_ready":True,"score":.5}):row=e.run_cycle(scan_only=True)[0]
+    assert row["gemini_review"]["verdict"] == "PASS"
+    assert row["candidate_action"] == "BUY" and row["action"] == "HOLD" and row["quantity"] == 0
+    assert row["position_sizing"]["reason"] == "target_reached"
+    assert row["decision"]["sizing_gate"] == "target_reached"
+    api.place_order.assert_not_called();store.db.close()
+
+
+@pytest.mark.parametrize("held,expected", [(5,"target_reached"),(20,"target_room_below_one_share")])
+def test_actual_zero_quantity_causes(held,expected):
+    from app.position_sizing import buy_order_size
+    s=Settings(_env_file=None)
+    price=461000 if held==5 else 108200
+    size=buy_order_size(s,price,{"totalAssetValue":99735709,"availableCash":91295609},{"quantity":held},40)
+    assert size["quantity"] == 0 and size["reason"] == expected
+    assert size["held_value"] == held*price
+    if held==20:assert 0 < size["remaining_target_value"] < price

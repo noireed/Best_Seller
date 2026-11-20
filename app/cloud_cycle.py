@@ -262,12 +262,15 @@ def main():
             economic = row.get("economic_news", {})
             gemini = row.get("gemini_review", {})
             print(json.dumps({"symbol": row.get("symbol"), "action": row["action"], "execution": row["execution"],
+                              "quantity": row.get("quantity"), "candidate_action": row.get("candidate_action"),
+                              "sizing_reason": (row.get("position_sizing") or {}).get("reason"),
                               "news": row.get("news", {}).get("status"), "dart": row.get("dart", {}).get("status"),
                               "news_adjustment": row.get("decision", {}).get("news_adjustment"),
                               "news_changed": comparison.get("news_changed_action"),
                               "dart_changed": comparison.get("dart_changed_action"),
                               "gemini_status": gemini.get("status"), "gemini_verdict": gemini.get("verdict"),
                               "gemini_http_status": gemini.get("http_status"),
+                              "gemini_validation_error": gemini.get("validation_error"),
                               "search_status": row.get("market_research", {}).get("status"),
                               "search_http_status": row.get("market_research", {}).get("http_status"),
                               "search_error_reasons": row.get("market_research", {}).get("error_reasons"),

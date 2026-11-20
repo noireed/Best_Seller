@@ -154,8 +154,15 @@ class TradingEngine:
                     quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
                     decision = {**decision, "action": action, "reason": "당일 경제사건 매도 검토: " + gemini["reason"],
                                 "event_exit": True}
+                candidate_action = action
+                if action == "BUY" and quantity == 0:
+                    action = "HOLD"
+                    decision = {**decision, "action": action,
+                        "reason": "추가 매수 수량 없음: " + sizing["reason"],
+                        "sizing_gate": sizing["reason"]}
                 self.store.decision(symbol, tech, llm, action, decision["reason"])
                 item = {"symbol": symbol, "price": price, "action": action, "quantity": quantity,
+                        "candidate_action": candidate_action,
                         "score": decision["score"], "reason": decision["reason"],
                         "technical_reason": tech.get("reason"),
                         "decision": decision, "economic_news": economics,
@@ -194,6 +201,14 @@ class TradingEngine:
                         else:
                             quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
                         item.update(price=price, quantity=quantity)
+                        if action == "BUY" and quantity == 0:
+                            item.update(action="HOLD", execution="NO_ORDER",
+                                reason="주문 직전 추가 매수 수량 없음: " + sizing["reason"])
+                            item["decision"] = {**item["decision"], "action": "HOLD",
+                                "sizing_gate": sizing["reason"], "reason": item["reason"]}
+                            self.store.policy_decision(symbol, item)
+                            results.append(item)
+                            continue
                     except Exception as exc:
                         item["execution"] = "BLOCKED: 주문 직전 시세 재확인 실패"
                         item["quote_error"] = type(exc).__name__

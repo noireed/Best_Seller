@@ -6,6 +6,8 @@ import sqlite3
 from tempfile import TemporaryDirectory
 
 from .cloud_cycle import Checkpoint
+from .gemini_review import quote_text
+from .news import parse_time
 
 
 def summarize(database, metadata):
@@ -25,6 +27,7 @@ def summarize(database, metadata):
         rows.append({"symbol": report["symbol"], "action": report["action"],
             "quantity": report["quantity"], "execution": report["execution"],
             "price": report.get("price"), "position_sizing": report.get("position_sizing"),
+            "candidate_action": report.get("candidate_action"),
             "technical_reason": report.get("technical_reason"),
             "baseline_action": report.get("decision", {}).get("baseline_action"),
             "decision_reason": report.get("reason"),
@@ -33,6 +36,7 @@ def summarize(database, metadata):
             "search_source_count": len(research.get("sources", [])),
             "gemini_status": opinion.get("status"), "gemini_http_status": opinion.get("http_status"),
             "gemini_verdict": opinion.get("verdict"), "gemini_reason": opinion.get("reason"),
+            "gemini_validation_error": opinion.get("validation_error"),
             "gemini_counter_case": opinion.get("counter_case"),
             "gemini_observed_at": opinion.get("observed_at"),
             "cited_domains": [source.get("domain") for source in opinion.get("sources", [])],
@@ -48,7 +52,6 @@ def summarize(database, metadata):
         cached = database.execute("SELECT at,report FROM gemini_cache ORDER BY at DESC LIMIT 160").fetchall()
     except sqlite3.OperationalError:
         cached = []
-    target = next((r for r in reports if r.get("symbol") == "068270" and r.get("market_research")), None)
     for at, encoded in cached:
         raw = json.loads(encoded)
         text = raw.get("text", "")
@@ -61,7 +64,10 @@ def summarize(database, metadata):
             continue
         if answer.get("symbol") != "068270" or "verdict" not in answer:
             continue
-        research = (target or {}).get("market_research", {})
+        candidates = [r["market_research"] for r in reports if r.get("symbol") == "068270"
+                      and r.get("market_research", {}).get("observed_at")
+                      and 0 <= (parse_time(at)-parse_time(r["market_research"]["observed_at"])).total_seconds() < 900]
+        research = max(candidates, key=lambda r: parse_time(r["observed_at"])) if candidates else {}
         index = answer.get("claim_id")
         claims = research.get("claims", [])
         claim = claims[index] if type(index) is int and 0 <= index < len(claims) else {}
@@ -69,7 +75,9 @@ def summarize(database, metadata):
         diagnostics.append({"at": at, "answer": answer, "finish_reason": raw.get("finish_reason"),
             "research_observed_at": research.get("observed_at"), "claim_count": len(claims),
             "selected_claim": claim, "quote_in_summary": isinstance(quote,str) and quote in research.get("text", ""),
-            "quote_in_claim": isinstance(quote,str) and quote in claim.get("text", "")})
+            "quote_in_claim": isinstance(quote,str) and quote in claim.get("text", ""),
+            "normalized_quote_in_summary": isinstance(quote,str) and quote_text(quote) in quote_text(research.get("text", "")),
+            "normalized_quote_in_claim": isinstance(quote,str) and quote_text(quote) in quote_text(claim.get("text", ""))})
     return {"cycle_metadata": metadata, "latest_grounded_symbols": len(rows), "rows": rows,
             "celltrion_response_diagnostics": diagnostics}
 
