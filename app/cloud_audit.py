@@ -85,11 +85,25 @@ def summarize(database, metadata):
             request = json.loads(encoded)
             pending.append({"id": identity, "at": at, "symbol": symbol, "state": state,
                             "action": request.get("action"), "quantity": request.get("quantity"),
-                            "order_id": request.get("orderId"), "last_error": request.get("last_error")})
+                            "order_id": request.get("orderId"), "last_error": request.get("last_error"),
+                            "absence_check": request.get("absence_check")})
+    except sqlite3.OperationalError:
+        pass
+    reconciliations = []
+    try:
+        for identity, at, symbol, encoded in database.execute(
+                "SELECT id,at,symbol,report FROM order_intents WHERE state='RESPONDED' ORDER BY id DESC LIMIT 20"):
+            request = json.loads(encoded)
+            if request.get("outcome") == "NO_SERVER_ORDER_OBSERVED":
+                reconciliations.append({"id": identity, "original_at": at, "symbol": symbol,
+                    "quantity": request.get("quantity"), "outcome": request["outcome"],
+                    "reconciled_at": request.get("reconciled_at"), "confirmation": request.get("confirmation"),
+                    "not_replayed": request.get("not_replayed")})
     except sqlite3.OperationalError:
         pass
     return {"cycle_metadata": metadata, "latest_grounded_symbols": len(rows), "rows": rows,
             "unresolved_orders": pending,
+            "order_reconciliations": reconciliations,
             "celltrion_response_diagnostics": diagnostics}
 
 

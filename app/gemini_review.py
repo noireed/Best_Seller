@@ -89,6 +89,8 @@ class GeminiReview:
         if not 0 <= age < self.s.gemini_cache_seconds:
             return {"status": "stale_research"}
         sources = list(research["sources"])
+        if not research.get("claims"):
+            return {"status": "no_grounded_claims"}
         evidence = [{"id": row["id"], "source": row["url"], "domain": row["domain"]} for row in sources]
         financials = None
         filings = []
@@ -147,6 +149,18 @@ class GeminiReview:
                 raise ValueError("invalid_schema_or_evidence")
             if quote_text(quote) not in quote_text(research["text"]):
                 raise ValueError("quote_summary_mismatch")
+            if len(quote_text(quote)) >= 20 and quote_text(quote) not in quote_text(claim["text"]):
+                candidates = [(i,c) for i,c in enumerate(research["claims"])
+                              if quote_text(quote) in quote_text(c["text"])]
+                if len(candidates) == 1:
+                    # Correct a model's misnumbered claim only when its exact cited text
+                    # uniquely identifies a provider-grounded claim. Never guess a source.
+                    result["submitted_claim_id"] = claim_index
+                    claim_index, claim = candidates[0]
+                    result["claim_id"] = claim_index
+                    ids = claim["source_ids"]
+                    if not ids or any(type(i) is not int or not 0 <= i < len(sources) for i in ids):
+                        raise ValueError("invalid_schema_or_evidence")
             if len(quote_text(quote)) < 20 or quote_text(quote) not in quote_text(claim["text"]):
                 return {"status": "unsupported_citation", "verdict": "HOLD", "validation_error": "quote_claim_mismatch"}
             normalized = quote not in research["text"] or quote not in claim["text"]

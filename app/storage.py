@@ -53,6 +53,14 @@ class Store:
     def unresolved_orders(self):
         return self.db.execute("SELECT COUNT(*) FROM order_intents WHERE state IN ('SUBMITTING','UNKNOWN')").fetchone()[0]
 
+    def note_order_check(self, identity, observation):
+        raw = self.db.execute("SELECT report FROM order_intents WHERE id=?", (identity,)).fetchone()[0]
+        report = {**json.loads(raw), "absence_check": observation}
+        self.db.execute("UPDATE order_intents SET report=? WHERE id=?",
+                        (json.dumps(report, ensure_ascii=False, allow_nan=False), identity))
+        self.db.commit()
+        self.order_checkpoint()
+
     def begin_order(self, symbol, report):
         row = self.db.execute("INSERT INTO order_intents(at,symbol,state,report) VALUES(?,?,?,?)",
             (datetime.now(ZoneInfo("Asia/Seoul")).isoformat(), symbol, "SUBMITTING",

@@ -227,3 +227,60 @@ def test_successor_reservation_retries_transport_errors(monkeypatch):
     cloud_continuation.reserve_successor()
     assert send.call_count == 2
     sleep.assert_called_once_with(15)
+
+
+@pytest.mark.parametrize("legacy", [False,True])
+def test_absent_timed_out_order_requires_two_stable_observations_and_unchanged_holdings(tmp_path,legacy):
+    from datetime import timedelta
+    store,identity=pending_store(tmp_path)
+    row=json.loads(store.db.execute("SELECT report FROM order_intents").fetchone()[0])
+    row.update(position_sizing={"held_value":2400},price=100)
+    if not legacy:row["order_context"]={"held_quantity":24}
+    store.db.execute("UPDATE order_intents SET report=?",(json.dumps(row),));store.db.commit()
+    store.finish_order(identity,"UNKNOWN",{"error_type":"APIError","http_status":None})
+    api=Mock();api.orders.return_value={"totalPages":1,"orders":[]}
+    api.portfolio.return_value={"holdings":[{"symbol":"005930","quantity":24,"availableQuantity":24}]}
+    start=NOW+timedelta(minutes=11)
+    assert not reconcile_orders(store,api,now=start)
+    assert not reconcile_orders(store,api,now=start+timedelta(seconds=59))
+    assert reconcile_orders(store,api,now=start+timedelta(seconds=60))
+    result=json.loads(store.db.execute("SELECT report FROM order_intents").fetchone()[0])
+    assert result["outcome"] == "NO_SERVER_ORDER_OBSERVED" and result["not_replayed"]
+    assert result["last_error"]["error_type"] == "APIError"
+    assert store.db.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+    api.place_order.assert_not_called();store.db.close()
+
+
+@pytest.mark.parametrize("held,available,rows",[(25,25,[]),(24,23,[]),
+    (24,24,[order(quantity=3)]),(24,24,[order(status="OPEN",createdAt="2026-11-20T08:00:00+09:00")])])
+def test_absence_never_clears_changed_or_reserved_holdings_or_ambiguous_history(tmp_path,held,available,rows):
+    from datetime import timedelta
+    store,identity=pending_store(tmp_path)
+    store.db.execute("UPDATE order_intents SET report=?",(json.dumps({"action":"BUY","quantity":2,"order_context":{"held_quantity":24}}),));store.db.commit()
+    api=Mock();api.orders.return_value={"totalPages":1,"orders":rows}
+    api.portfolio.return_value={"holdings":[{"symbol":"005930","quantity":held,"availableQuantity":available}]}
+    assert not reconcile_orders(store,api,now=NOW+timedelta(hours=1))
+    assert not reconcile_orders(store,api,now=NOW+timedelta(hours=2))
+    api.place_order.assert_not_called();store.db.close()
+
+
+def test_late_order_appearing_after_absence_observation_is_reconciled_as_fill(tmp_path):
+    from datetime import timedelta
+    store,identity=pending_store(tmp_path)
+    store.db.execute("UPDATE order_intents SET report=?",(json.dumps({"action":"BUY","quantity":2,"order_context":{"held_quantity":24}}),));store.db.commit()
+    api=Mock();api.orders.return_value={"totalPages":1,"orders":[]}
+    api.portfolio.return_value={"holdings":[{"symbol":"005930","quantity":24,"availableQuantity":24}]}
+    assert not reconcile_orders(store,api,now=NOW+timedelta(hours=1))
+    api.orders.return_value={"totalPages":1,"orders":[order()]}
+    assert reconcile_orders(store,api,now=NOW+timedelta(hours=1,minutes=1))
+    assert store.db.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
+    api.place_order.assert_not_called();store.db.close()
+
+
+def test_shortened_server_history_cannot_confirm_absence(tmp_path):
+    from datetime import timedelta
+    store,_=pending_store(tmp_path)
+    store.order("000660","BUY",1,100,"FILLED",{"orderId":99})
+    api=Mock();api.orders.return_value={"totalPages":1,"orders":[]}
+    assert not reconcile_orders(store,api,now=NOW+timedelta(days=1))
+    api.portfolio.assert_not_called();store.db.close()

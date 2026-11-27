@@ -4,6 +4,7 @@ import re
 from datetime import timedelta, timezone
 
 from .dart import DartError
+from .news import parse_time
 
 
 class IntradayDisclosures:
@@ -32,6 +33,17 @@ class IntradayDisclosures:
             baseline = self.baseline.collect(symbol) if self.baseline else {"symbol": symbol, "status": "unavailable"}
         except Exception as exc:
             baseline = {"symbol": symbol, "status": "unavailable", "reason": "baseline_" + type(exc).__name__}
+        try:
+            observed = (baseline.get("financials") or {}).get("observed_at")
+            stale = baseline.get("status") != "ok" or (observed and
+                not 0 <= (self.client._now()-parse_time(observed)).total_seconds() <= 86400)
+            if stale and self.baseline is not self.client:
+                previous = baseline
+                baseline = self.client.collect(symbol)
+                baseline["snapshot_refresh"] = {"attempted": True, "previous_status": previous.get("status"),
+                                                "reason": previous.get("reason", "stale_financial_observation")}
+        except (DartError, ValueError, TypeError) as exc:
+            baseline = {**baseline, "snapshot_refresh": {"attempted": True, "error_type": type(exc).__name__}}
         if self.scan is None:
             try:
                 self.scan = self._scan()

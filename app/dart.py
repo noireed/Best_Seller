@@ -55,6 +55,25 @@ class DartClient:
             raise DartError("DART_CLOCK_REQUIRES_TIMEZONE")
         return now.astimezone(timezone.utc)
 
+    def seed_corporate_codes(self, source_path):
+        """Reuse an unexpired reference file from the research worker; never extend its age."""
+        source = Path(source_path)
+        if not source.exists() or source.resolve() == Path(self.db_path).resolve():
+            return
+        connection = sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            try:
+                rows = connection.execute("SELECT account,request,observed,expires,payload FROM dart_cache WHERE account=? AND expires>?",
+                                          (self.account, self._now().timestamp())).fetchall()
+            except sqlite3.OperationalError:
+                return
+        finally:
+            connection.close()
+        with self._db() as target:
+            for row in rows:
+                if json.loads(row[1])[0] == "corpCode.xml" and datetime.fromisoformat(row[2]) <= self._now():
+                    target.execute("INSERT OR REPLACE INTO dart_cache VALUES(?,?,?,?,?)", row)
+
     def _request(self, endpoint, params, *, ttl=None):
         if not self.api_key:
             raise DartError("DART_API_KEY 미설정")

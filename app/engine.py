@@ -230,6 +230,10 @@ class TradingEngine:
                     elif self.store.unresolved_orders():
                         item["execution"] = "BLOCKED: 결과 미확정 주문 확인 필요"
                     else:
+                        item["order_context"] = {"held_quantity": int(holding.get("quantity", 0)),
+                            "available_quantity": int(holding.get("availableQuantity", 0)),
+                            "available_cash": portfolio.get("availableCash"),
+                            "observed_at": self.clock().isoformat()}
                         identity = self.store.begin_order(symbol, item)
                         try:
                             order = self.api.place_order(symbol, action, quantity)
@@ -242,7 +246,9 @@ class TradingEngine:
                             rejected = isinstance(exc, APIError) and exc.status in (400, 401, 403, 404, 409, 422, 429)
                             item["execution"] = "REJECTED" if rejected else "UNKNOWN_ORDER_STATE"
                             state = "RESPONDED" if rejected else "UNKNOWN"
-                            response = {"error_type": type(exc).__name__, "http_status": getattr(exc, "status", None)}
+                            response = {"error_type": type(exc).__name__, "http_status": getattr(exc, "status", None),
+                                        "error_code": getattr(exc, "code", None),
+                                        "cause_type": getattr(exc, "cause_type", None)}
                             self.store.finish_order(identity, state, response)
                             self.store.policy_decision(symbol, item)
                             results.append(item)

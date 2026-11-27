@@ -58,7 +58,8 @@ def test_invalid_or_invented_opinion_never_approves(reviewer, updates):
 def test_source_must_support_the_actual_quote(reviewer):
     r = research();r["claims"].append({"text": "A completely different claim about the company.", "source_ids": [1]})
     result = review(reviewer, answer(claim_id=1), r=r)
-    assert result["status"] == "unsupported_citation" and result["verdict"] == "HOLD"
+    assert result["status"] == "ok" and result["submitted_claim_id"] == 1
+    assert result["claim_id"] == 0 and result["evidence_ids"] == [0,1]
 
 
 def test_freshness_is_observation_not_cache_hit(reviewer):
@@ -267,3 +268,20 @@ def test_actual_zero_quantity_causes(held,expected):
     assert size["quantity"] == 0 and size["reason"] == expected
     assert size["held_value"] == held*price
     if held==20:assert 0 < size["remaining_target_value"] < price
+
+
+def test_ambiguous_claim_correction_still_holds(reviewer):
+    r=research();r["claims"]=[{"id":0,"text":"Different topic without the cited event.","source_ids":[0]},
+        {"id":1,"text":QUOTE,"source_ids":[0]},{"id":2,"text":QUOTE,"source_ids":[1]}]
+    assert review(reviewer,answer(claim_id=0),r=r)["status"] == "unsupported_citation"
+
+
+def test_stale_dart_snapshot_refreshes_financials_directly():
+    baseline=Mock();baseline.collect.return_value={"symbol":"005930","status":"unavailable","reason":"stale"}
+    client=Mock();client._now.return_value=NOW
+    client.collect.return_value={"symbol":"005930","status":"ok","financials":{"observed_at":NOW.isoformat()},"financial_status":"ok"}
+    client._request.side_effect=[({"005930":"00126380"},NOW.isoformat()),({"total_page":0,"list":[]},NOW.isoformat())]
+    r=IntradayDisclosures(baseline,client).collect("005930")
+    assert r["financial_status"] == "ok" and r["snapshot_refresh"]["attempted"]
+    assert r["intraday"]["status"] == "ok"
+    client.collect.assert_called_once_with("005930")

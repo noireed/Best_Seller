@@ -288,3 +288,32 @@ def test_older_checkpoint_restores_without_cycle_metadata(tmp_path, monkeypatch)
     checkpoint.restore(tmp_path)
     assert (tmp_path / "trading.db").read_bytes() == b"old-state"
     assert not (tmp_path / "cycle.json").exists()
+
+
+def test_pending_order_does_not_stop_fresh_analysis_or_mark_it_as_trading(monkeypatch):
+    session_clock(monkeypatch,"2026-11-19T10:00:00+09:00")
+    for field in ("CLOUD_PROBE","CLOUD_RESEARCH","RECOVERY_SHA","GEMINI_API_KEY","DART_API_KEY"):
+        monkeypatch.delenv(field,raising=False)
+    old="2026-11-18T10:00:00+09:00"
+    trade,research=Mock(),Mock()
+    def restore(directory,**kwargs):
+        (directory/"cycle.json").write_text(json.dumps({"started_at":old,"durable_orders":True}),encoding="utf-8")
+        return "blocked"
+    trade.restore.side_effect=restore
+    saved=[]
+    trade.save.side_effect=lambda directory,status,**kw:saved.append(json.loads((directory/"cycle.json").read_text(encoding="utf-8")))
+    monkeypatch.setattr(cloud_cycle,"Checkpoint",lambda **kw:research if kw.get("research") else trade)
+    api=Mock();api.login.return_value={"teamId":5}
+    monkeypatch.setattr(cloud_cycle,"TradingAPI",Mock(return_value=api))
+    store=MagicMock();store.unresolved_orders.return_value=1
+    monkeypatch.setattr(cloud_cycle,"Store",Mock(return_value=store))
+    monkeypatch.setattr(cloud_cycle,"reconcile_orders",Mock(return_value=False))
+    engine=Mock();engine.run_cycle.return_value=[{"symbol":"005930","action":"HOLD","quantity":0,"execution":"SCAN_ONLY"}]
+    monkeypatch.setattr(cloud_cycle,"TradingEngine",Mock(return_value=engine))
+    with pytest.raises(SystemExit) as result:cloud_cycle.main()
+    assert result.value.code == 75
+    engine.run_cycle.assert_called_once_with(scan_only=True)
+    assert saved[-1]["started_at"] == old
+    assert saved[-1]["analysis_only_due_to_pending_orders"]
+    assert saved[-1]["last_analysis_at"] == "2026-11-19T10:00:00+09:00"
+    api.place_order.assert_not_called()

@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 import requests
 
 class APIError(RuntimeError):
-    def __init__(self, message, *, status=None, code=None, retry_after=None):
+    def __init__(self, message, *, status=None, code=None, retry_after=None, cause_type=None):
         super().__init__(message)
         self.status, self.code, self.retry_after = status, code, retry_after
+        self.cause_type = cause_type
 
 class TradingAPI:
     def __init__(self, base_url, team_code):
@@ -88,7 +89,8 @@ class TradingAPI:
                                         timeout=self.request_timeout, **kwargs)
         except requests.RequestException as exc:
             # A timed-out order may already have been accepted. Never replay it here.
-            raise APIError("API 통신 실패: 주문 요청이었다면 내역 조회로 결과 확인 필요") from exc
+            raise APIError("API 통신 실패: 주문 요청이었다면 내역 조회로 결과 확인 필요",
+                           code="TRANSPORT_ERROR", cause_type=type(exc).__name__) from exc
 
     def me(self): return self._request("GET", "/api/auth/me")
     def stocks(self, keyword=""):

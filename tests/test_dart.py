@@ -312,3 +312,18 @@ def test_dart_exception_preserves_engine_baseline_and_audit(tmp_path):
     assert "sensitive-url" not in json.dumps(result)
     api.place_order.assert_not_called()
     store.db.close()
+
+
+def test_reference_cache_seed_preserves_original_expiry_and_requires_same_key(tmp_path):
+    import json
+    original=DartClient("key",tmp_path/"source.db",clock=lambda:NOW)
+    request=json.dumps(["corpCode.xml",{}])
+    observed=NOW.isoformat();expiry=NOW.timestamp()+100
+    with original._db() as db:db.execute("INSERT INTO dart_cache VALUES(?,?,?,?,?)",(original.account,request,observed,expiry,json.dumps({SYMBOL:"00126380"})))
+    target=DartClient("key",tmp_path/"target.db",clock=lambda:NOW)
+    target.seed_corporate_codes(original.db_path)
+    with target._db() as db:row=db.execute("SELECT observed,expires FROM dart_cache").fetchone()
+    assert row == (observed,expiry)
+    other=DartClient("other",tmp_path/"other.db",clock=lambda:NOW)
+    other.seed_corporate_codes(original.db_path)
+    with other._db() as db:assert db.execute("SELECT COUNT(*) FROM dart_cache").fetchone()[0] == 0
