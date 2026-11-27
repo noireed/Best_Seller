@@ -1,0 +1,21 @@
+name: AQuA state maintenance
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '31 16 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: aqua-state-maintenance
+  cancel-in-progress: false
+jobs:
+  compact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m app.cloud_compaction
+        env:
+          GH_TOKEN: ${{ github.token }}
