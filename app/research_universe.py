@@ -22,6 +22,14 @@ COMPANIES = {
     "071050": "Korea Investment Holdings", "018260": "Samsung SDS", "021240": "Coway",
 }
 
+KOREAN_COMPANIES = dict(zip(COMPANIES, (
+    "삼성전자", "SK하이닉스", "네이버", "카카오", "현대차", "기아", "포스코홀딩스", "LG화학",
+    "삼성SDI", "LG에너지솔루션", "삼성바이오로직스", "셀트리온", "KB금융", "신한지주",
+    "하나금융지주", "현대모비스", "삼성물산", "삼성전기", "두산에너빌리티", "LG",
+    "SK텔레콤", "KT", "삼성생명", "삼성화재", "고려아연", "삼성중공업", "HMM",
+    "롯데케미칼", "에쓰오일", "SK이노베이션", "유한양행", "한미약품", "KT&G",
+    "아모레퍼시픽", "현대제철", "미래에셋증권", "키움증권", "한국금융지주", "삼성SDS", "코웨이")))
+
 
 def with_research_aliases(settings):
     aliases = {symbol: [name] for symbol, name in COMPANIES.items()}

@@ -136,6 +136,8 @@ class TradingEngine:
                 elif action == "SELL":
                     quantity = min(int(holding.get("availableQuantity", 0)), self.s.max_order_value_krw // price)
                 gemini = {"status": "not_reviewed"}
+                if (action == "BUY" or holding.get("quantity", 0) > 0) and not reviews_remaining:
+                    gemini = {"status": "cycle_review_budget"}
                 if (action == "BUY" and (quantity or scan_only) or holding.get("quantity", 0) > 0) and reviews_remaining and self.gemini.key:
                     reviews_remaining -= 1
                     try:
@@ -287,4 +289,5 @@ class TradingEngine:
                 self.historical_events.update(updated)
             except (ValueError, TypeError, KeyError, ZeroDivisionError) as exc:
                 log.warning("과거 공시 결과 갱신 실패: %s", type(exc).__name__)
+        self.gemini.client.release_reservations()
         return results

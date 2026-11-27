@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,9 +12,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.1-flash-lite"
     gemini_project: str = "best-seller-514603"
+    gemini_backend: Literal["developer", "vertex"] = "developer"
+    gemini_min_interval_seconds: float = Field(default=12, ge=0, le=60)
     gemini_required_for_buy: bool = True
-    gemini_reviews_per_cycle: int = Field(default=40, ge=1, le=40)
-    gemini_daily_budget: int = Field(default=2000, ge=1, le=2000)
+    gemini_reviews_per_cycle: int = Field(default=8, ge=1, le=40)
+    gemini_daily_budget: int = Field(default=100, ge=1, le=2000)
     gemini_cache_seconds: int = Field(default=900, ge=60, le=3600)
     intraday_research_enabled: bool = True
     protect_sell_signal: bool = True

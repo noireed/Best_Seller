@@ -39,6 +39,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  GEMINI_BACKEND: developer
+  GEMINI_DAILY_BUDGET: '100'
+  GEMINI_REVIEWS_PER_CYCLE: '8'
+  GEMINI_MIN_INTERVAL_SECONDS: '12'
   GEMINI_PROJECT: best-seller-514603
   GEMINI_REQUIRED_FOR_BUY: 'true'
   PROTECT_SELL_SIGNAL: 'true'

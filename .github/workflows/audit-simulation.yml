@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt 'cryptography>=44,<49'
-      - run: python -m pytest tests/test_grounded_review.py tests/test_cloud_audit.py tests/test_cloud_recovery.py tests/test_cloud_session.py tests/test_dart.py -q
+      - run: python -m pytest tests/test_grounded_review.py tests/test_cloud_audit.py tests/test_cloud_recovery.py tests/test_cloud_session.py tests/test_dart.py tests/test_free_research.py -q
       - run: python -m app.cloud_audit
         env:
           GH_TOKEN: ${{ github.token }}

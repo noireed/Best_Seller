@@ -33,6 +33,8 @@ def summarize(database, metadata):
             "decision_reason": report.get("reason"),
             "research_observed_at": research.get("observed_at"),
             "search_status": research.get("status"), "search_http_status": research.get("http_status"),
+            "rss_status": research.get("news_status"), "research_provider": research.get("provider"),
+            "gemini_backend": opinion.get("backend"),
             "search_source_count": len(research.get("sources", [])),
             "gemini_status": opinion.get("status"), "gemini_http_status": opinion.get("http_status"),
             "gemini_verdict": opinion.get("verdict"), "gemini_reason": opinion.get("reason"),
