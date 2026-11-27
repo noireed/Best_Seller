@@ -78,7 +78,18 @@ def summarize(database, metadata):
             "quote_in_claim": isinstance(quote,str) and quote in claim.get("text", ""),
             "normalized_quote_in_summary": isinstance(quote,str) and quote_text(quote) in quote_text(research.get("text", "")),
             "normalized_quote_in_claim": isinstance(quote,str) and quote_text(quote) in quote_text(claim.get("text", ""))})
+    pending = []
+    try:
+        for identity, at, symbol, state, encoded in database.execute(
+                "SELECT id,at,symbol,state,report FROM order_intents WHERE state IN ('SUBMITTING','UNKNOWN')"):
+            request = json.loads(encoded)
+            pending.append({"id": identity, "at": at, "symbol": symbol, "state": state,
+                            "action": request.get("action"), "quantity": request.get("quantity"),
+                            "order_id": request.get("orderId"), "last_error": request.get("last_error")})
+    except sqlite3.OperationalError:
+        pass
     return {"cycle_metadata": metadata, "latest_grounded_symbols": len(rows), "rows": rows,
+            "unresolved_orders": pending,
             "celltrion_response_diagnostics": diagnostics}
 
 
