@@ -74,3 +74,14 @@ def test_free_backend_throttles_and_only_counts_attempted_calls_after_clean_comp
     client.release_reservations()
     assert store.db.execute("SELECT used FROM gemini_usage").fetchone()[0] == 2
     store.db.close()
+
+
+def test_old_vertex_reservations_do_not_exhaust_developer_budget(tmp_path):
+    store=Store(str(tmp_path/"db"));session=Mock();session.post.return_value.status_code=200
+    session.post.return_value.json.return_value={"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}
+    paid=GeminiClient(Settings(_env_file=None,gemini_api_key="test",gemini_backend="vertex",gemini_daily_budget=2),store,session=session)
+    paid.generate("one",{},NOW)
+    free=GeminiClient(Settings(_env_file=None,gemini_api_key="test",gemini_backend="developer",gemini_daily_budget=2),store,session=session)
+    assert free.generate("one",{},NOW)["status"] == "ok"
+    assert paid.account != free.account and session.post.call_count == 2
+    store.db.close()

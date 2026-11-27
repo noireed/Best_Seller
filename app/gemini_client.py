@@ -16,7 +16,9 @@ class GeminiClient:
         self.settings, self.store = settings, store
         self.key = getattr(settings, "gemini_api_key", "")
         self.session = session or requests.Session()
-        self.account = hashlib.sha256(self.key.encode()).hexdigest()
+        # Developer and Vertex quotas are separate. Past paid-search reservations
+        # must not exhaust the newly selected free-analysis allowance.
+        self.account = hashlib.sha256((getattr(settings, "gemini_backend", "developer") + "\0" + self.key).encode()).hexdigest()
         self.reserved = 0
         self.reserved_day = None
         self.clock, self.sleep = clock or time.monotonic, sleep or time.sleep
